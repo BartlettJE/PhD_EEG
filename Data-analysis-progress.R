@@ -3,14 +3,14 @@ require(cowplot)
 
 # Create data frame of my progress
 progress <- tribble(~Group, ~Number, ~Target,
-                    "Non-smokers", 3, 18,
+                    "Non-smokers", 4, 18,
                     #"LITS", 0, 18,
                     #"Daily", 0, 18,
                     "Smokers", 1, 36)
 
 # Create data frame of Kieron's progress
 kieron_progress <- tribble(~Group, ~Number, ~Target,
-                    "Non-smokers", 4, 10,
+                    "Non-smokers", 5, 10,
                     #"LITS", 0, 10,
                     #"Daily", 0, 10,
                     "Smokers", 2, 20)
