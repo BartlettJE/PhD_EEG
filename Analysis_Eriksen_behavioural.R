@@ -24,13 +24,14 @@ raw %>%
 #  Calculate error rates 
 raw %>% 
   group_by(Subject) %>% 
+  filter(Block != "Practice") %>% 
   summarise(Accuracy = mean(correct) * 100,
             Correct = sum(correct),
             Errors = 400 - sum(correct))
 
 #  Create violin plot 
 raw %>% 
-  filter(response_time < 1000) %>% 
+  filter(Block != "Practice" & response_time < 1000) %>% 
   ggplot(aes(x = Congruency, y = response_time, fill = Congruency)) + 
   geom_violin() + 
   geom_boxplot(width = 0.2) + 
