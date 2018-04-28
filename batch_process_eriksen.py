@@ -113,8 +113,8 @@ for filepath in filelist:
         if len(load_inds)>0:
             i = 0
             exclude_component = excludelist.iloc[load_inds,i]
-            while ~np.isnan(exclude_component[0]):
-                eog_inds = [eog_inds, int(exclude_component[0])]
+            while np.isnan(exclude_component.iloc[0]) == False:
+                eog_inds = [eog_inds, int(exclude_component.iloc[0])]
                 i = i + 1
                 exclude_component = excludelist.iloc[load_inds,i]
         else:
@@ -122,7 +122,7 @@ for filepath in filelist:
             df = pd.DataFrame.from_dict(d, dtype = str)
             i = 0
             exclude_component = input("Type single component to exclude: ")
-            while len(exclude_component)>0:
+            while exclude_component < 20:
                 eog_inds = [eog_inds, int(exclude_component)]
                 df.iloc[0,i] = exclude_component
                 i = i + 1
