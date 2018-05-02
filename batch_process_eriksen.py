@@ -136,7 +136,7 @@ for filepath in filelist:
         ica.apply(raw)
 
 # Create epochs of the data
-        epochs = mne.Epochs(raw, events, event_id, tmin=-0.5, tmax=1.5,
+        epochs = mne.Epochs(raw, events, event_id, tmin=-0.2, tmax=0.8,
                             proj=True, picks=pickseeg,
                             baseline=(-0.2, 0), preload=True)
         del raw
