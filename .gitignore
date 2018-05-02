@@ -10,3 +10,4 @@ trialviewer/
 .Rhistory
 Rdata/
 Back_up_raw/
+*.csv
