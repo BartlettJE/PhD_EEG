@@ -23,7 +23,7 @@ for filepath in filelist:
 #  read .csv file
         rtdata = pd.read_csv(filepath,sep=',')
 
-#  label correct and incorrect trials
+#  label go and nogo trials
         Go = np.where(rtdata['Stim_type'] == "Go")[0]
         Nogo = np.where(rtdata['Stim_type'] == "NoGo")[0]
 
@@ -68,7 +68,7 @@ for filepath in filelist:
 
 #define event markers
         events[Go,2] = 1
-        events[NoGo,2] = 2
+        events[Nogo,2] = 2
         event_id = {'Go': 1, 'NoGo': 2}
 
 #prepare ICA ocular correction procedure
