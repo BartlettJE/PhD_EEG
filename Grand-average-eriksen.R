@@ -100,6 +100,11 @@ difference_plot <- ggplot() +
   geom_hline(yintercept = 0, linetype = 2) + 
   geom_vline(xintercept = 0, linetype = 2) + 
   theme_classic() + 
+  annotate("rect", xmin = 25, xmax = 75, ymin = -2, ymax = 3,
+           alpha = .5) + 
+  annotate("rect", xmin = 200, xmax = 400, ymin = -2, ymax = 3,
+           alpha = .5) +
+  theme_classic() + 
   xlab("") + 
   ylab(expression("Mean Amplitude"~(mu*"V"))) 
 
