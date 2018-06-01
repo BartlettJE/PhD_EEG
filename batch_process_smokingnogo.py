@@ -115,7 +115,7 @@ for filepath in filelist:
             df = pd.DataFrame.from_dict(d, dtype = str)
             i = 0
             exclude_component = input("Type single component to exclude: ")
-            while exclude_component < 20:
+            while exclude_component < 40:
                 eog_inds = [eog_inds, int(exclude_component)]
                 df.iloc[0,i] = exclude_component
                 i = i + 1
