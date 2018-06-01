@@ -134,6 +134,10 @@ for filepath in filelist:
 
 # exclude chosen ICA components
         ica.apply(raw)
+        
+        # As this is for the Flanker task and we are interested in error processing 
+# We need time 0 to be when the response was made, not stimulus onset. 
+        events[:,0] = events[:,0] + rts #add reaction time to event marker
 
 # Create epochs of the data
         epochs = mne.Epochs(raw, events, event_id, tmin=-0.2, tmax=0.8,
