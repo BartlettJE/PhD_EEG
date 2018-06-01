@@ -5,10 +5,7 @@ require(readbulk)
 #  Read in raw data
 rawdata <- read_opensesame(directory = "Raw_data/Behavioural/Smoking-nogo/")
 
-rawdata %>% 
-  group_by(File, Block) %>% 
-  summarise(N = n())
-
+# Create subject number from the whole file name
 rawdata <- rawdata %>% 
   mutate(Subject = substring(File, 0, 4))
 
@@ -19,7 +16,7 @@ rawdata <- rawdata %>%
 
 # How many errors and what was the overall accuracy? 
 rawdata %>% 
-  group_by(Subject) %>% 
+  group_by(substring(Subject, 0, 1), Stimulus, Cue_type) %>% 
   summarise(Accuracy = mean(correct) * 100,
             Correct = sum(correct),
             N = n())
