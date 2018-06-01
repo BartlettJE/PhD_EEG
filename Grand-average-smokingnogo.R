@@ -68,8 +68,10 @@ for (i in 1:length(csv.files)){
   if (substr(current.csv, 0, 4) != substr(current.mat, 0, 4)){
     print(paste("The files of participant ", substr(current.csv, 0, 4), " do not match.", sep = ""))
     break
-  }
-  else{ #if all is good, start processing the files
+  } else if (length(dat[[electrode]][1, ,1]) != 208){
+    print(paste("There are not 208 trials in participant ", substr(current.csv, 0, 4), sep = ""))
+    break
+  } else{ #if all is good, start processing the files
     # apply functions from above to get erps for correct and incorrect trials
     go.erp <- get_go(mat = dat, csv = trial_info, electrode = electrode)
     nogo.erp <- get_nogo(mat = dat, csv = trial_info, electrode = electrode)
