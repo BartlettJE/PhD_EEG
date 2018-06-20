@@ -128,11 +128,15 @@ for filepath in filelist:
 # exclude chosen ICA components
         ica.apply(raw)
 
+# specify extreme voltage threshold
+        #reject = dict(eeg=100e-6)
+
 # Create epochs of the data
         epochs = mne.Epochs(raw, events, event_id,
         tmin=-0.2, tmax=0.8,
         proj=True, picks=pickseeg,
         baseline=(-0.2, 0),
+        #reject = reject,
         preload=True)
 
         del raw
