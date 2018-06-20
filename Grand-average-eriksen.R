@@ -109,14 +109,19 @@ difference_plot <- ggplot() +
   annotate("rect", xmin = 200, xmax = 400,ymin = min(grand_incorrect - grand_correct), ymax = max(grand_incorrect - grand_correct),
            alpha = .5) +
   theme_classic() + 
-  xlab("") + 
+  xlab("Time (ms)") + 
   ylab(expression("Mean Amplitude"~(mu*"V"))) 
 
 # arrange the plots in a grid to present together 
-plot_grid(individual_plot, difference_plot,
+eriksen_grid <- plot_grid(individual_plot, difference_plot,
           ncol = 1,
           nrow = 2,
-          labels = c("Individual waveforms", "Difference waveform"),
-          label_x = 0.25)
+          label_x = 0.35)
+
+#  Save plot
+save_plot("Plots/Eriksen_grand.pdf", eriksen_grid, #specific function for saving plots 
+          ncol = 1,
+          nrow = 1,
+          base_aspect_ratio = 2)
 
   
