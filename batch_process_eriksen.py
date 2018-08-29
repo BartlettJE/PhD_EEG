@@ -134,38 +134,36 @@ for filepath in filelist:
 
 # exclude chosen ICA components
         ica.apply(raw)
-        
-        # As this is for the Flanker task and we are interested in error processing 
-# We need time 0 to be when the response was made, not stimulus onset. 
+
+        # As this is for the Flanker task and we are interested in error processing
+# We need time 0 to be when the response was made, not stimulus onset.
         events[:,0] = events[:,0] + rts #add reaction time to event marker
 
+# specify extreme voltage threshold
+        reject = dict(eeg=100e-6)   #CHANGED
+
 # Create epochs of the data
-        epochs = mne.Epochs(raw, events, event_id, tmin=-0.2, tmax=0.8,
-                            proj=True, picks=pickseeg,
-                            baseline=(-0.2, 0), preload=True)
+        epochs = mne.Epochs(raw, events, event_id,
+        tmin=-0.2, tmax=0.8,
+        proj=True, picks=pickseeg,
+        baseline=(-0.2, 0),
+        reject = reject,    #CHANGED
+        preload=True)
+
         del raw
-        eps = epochs._data
+
+# Create an empty matrix that has the total trial N
+# NAs are inserted as placeholders for epochs that are rejected
+        retained = epochs.selection     #CHANGED
+        eps = np.empty((420,33,1025))   #CHANGED
+        eps[:] = np.nan                 #CHANGED
+        eps[retained,:,:] = epochs._data #CHANGED
         epschn = epochs.ch_names
         eps3 = np.moveaxis(eps,[0,1,2],[1,0,2])
 
         d = defaultdict(list)
-        for i in np.arange(33):
-            d[epschn[i]].append(eps3[i,:,:])
+        for ii in np.arange(33):
+            d[epschn[ii]].append(eps3[ii,:,:])
+
 # save as .mat file for analysis in R
-        sio.savemat("Rdata/Eriksen/"+os.path.splitext(filename)[0]+'.mat', mdict=d)
-
-        #pan = pd.Panel(eps3)
-        #df = pan.to_frame()
-        #df.columns = epschn
-
-        #df.reset_index(inplace=True)
-        #df.to_feather("Rdata/Eriksen/"+os.path.splitext(filename)[0]+".feather")
-
-        #nr,nc = eps3.shape
-        #datar = ro.r.matrix(eps3, nrow=nr, ncol=nc)
-
-        #ro.r.assign("data", datar)
-        #ro.r("save(data, file='Rdata/Eriksen/"+os.path.splitext(filename)[0]+".Rdata')")
-
-
-        #fig.savefig("Results2/"+fname+"-"+chsel+".png", dpi=300)
+        sio.savemat("Rdata/Smoking-nogo/"+os.path.splitext(filename)[0]+'.mat', mdict=d)
