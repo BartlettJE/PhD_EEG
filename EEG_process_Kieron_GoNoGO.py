@@ -17,18 +17,20 @@ from collections import defaultdict
 #  Step 1 - read in data and define settings
 #  Read in OpenSesame file
 rtdata = pd.read_csv(
-    'Raw_data/Behavioural/Go-NoGo/subject-101-gonogo.csv', sep=',')
+    'Raw_data/Behavioural/Smoking-nogo/1004-smokingnogo.csv', sep=',')
 
 #  Read in EEG file from Biosemi II
-raw = mne.io.read_raw_edf('Raw_data/EEG/Go-NoGo/101_gonogo.bdf',
+raw = mne.io.read_raw_edf('Raw_data/EEG/Smoking-nogo/1004-smokingnogo.bdf',
                           preload=True)
 
 #  Important information for plotting and saving
-participant_n = "101"  # participant code of participant
+participant_n = "1004"  # participant code of participant
 
 #  Identify which trials were Go and which were NoGo from Opensesame file
-go = np.where(rtdata['Stim_type'] == 'Go')[0]
-nogo = np.where(rtdata['Stim_type'] == 'NoGo')[0]
+go_smoking = np.where((rtdata['Stimulus'] == 'Go') & (rtdata['Cue_type'] == 'smoking'))[0]  
+go_neutral = np.where((rtdata['Stimulus'] == 'Go') & (rtdata['Cue_type'] == 'neutral'))[0]
+nogo_smoking = np.where((rtdata['Stimulus'] == 'NoGo') & (rtdata['Cue_type'] == 'smoking'))[0]
+nogo_neutral = np.where((rtdata['Stimulus'] == 'NoGo') & (rtdata['Cue_type'] == 'neutral'))[0]
 
 #  Convert the RT variable into a matrix
 rts = rtdata['response_time'].as_matrix()
@@ -76,11 +78,13 @@ raw.filter(l_freq=0.15,  # 0.15 based on Rietdijk et al.
            h_freq=30.0)
 
 #  Label events as correct or incorrect
-events[go, 2] = 1
-events[nogo, 2] = 2
+events[go_smoking, 2] = 1
+events[go_neutral, 2] = 2
+events[nogo_smoking, 2] = 3
+events[nogo_neutral, 2] = 4
 
 #  Record what the values are for the events
-event_id = {'Go': 1, 'NoGo': 2}
+event_id = {'Go/smoking': 1, 'Go/neutral': 2, 'NoGo/smoking': 3, 'NoGo/neutral': 4}
 
 #  Step 5 - perform occular correction procedure
 
@@ -121,7 +125,7 @@ ica.plot_components(picks=pickseeg)
 #
 
 #  Select likely eyeblink component from topographic maps
-eog_inds = [1]
+eog_inds = [17]
 #  append this component to exclude
 ica.exclude.extend(eog_inds)
 
@@ -130,107 +134,79 @@ ica.apply(raw)  # directly changes raw data set
 
 #  Step 6 - finally extract the epochs
 
+reject = dict(eeg = 100e-6)
+
 epochs = mne.Epochs(raw,  # raw data
-                    events,  # event markers
-                    event_id,  # are the markers for correct or incorrect trials?
+                    events[32:208],  # event markers. Ignore practice, start at trial 32
+                    event_id,  # are the markers for go or nogo trials?
                     tmin=-0.2, tmax=0.8,  # define epoch
                     proj=True,  # something about projection vectors
                     picks=pickseeg,  # which channels?
                     # Which period should be selected for baseline correction?
+                    #reject = reject,
                     baseline=(-0.2, 0),
                     preload=True)  # true = load all epochs from disk
+
+print epochs
+
+go_smoke_av = epochs['Go/smoking'].average()
+nogo_smoke_av = epochs['NoGo/smoking'].average()
+go_neutral_av = epochs['Go/neutral'].average()
+nogo_neutral_av = epochs['NoGo/neutral'].average()
 
 # delete the original raw data
 del raw
 
 # until this point, the data is hidden, make it an object
-eps = epochs._data
+eps_go_smoke = epochs['Go/smoking']._data
+eps_go_neutral = epochs['Go/neutral']._data
+eps_nogo_smoke = epochs['NoGo/smoking']._data
+eps_nogo_neutral = epochs['NoGo/neutral']._data
+
 # define the channels
 epschn = epochs.ch_names
 
 #  Data pre-processing is complete!
 
 #  Option to save data as a .mat file to be used in R
-eps2 = np.moveaxis(eps, [0, 1, 2], [1, 0, 2])
+
+# Go trials smoking cues 
+eps2 = np.moveaxis(eps_go_smoke, [0, 1, 2], [1, 0, 2])
 
 d = defaultdict(list)
 #
 for i in np.arange(33):
     d[epschn[i]].append(eps2[i, :, :])
 
-sio.savemat('Clean_data/EEG/Go-NoGo/' + participant_n + '_GoNoGo.mat', mdict=d)
+sio.savemat('Kieron_data/' + participant_n + '_Go_smoking.mat', mdict=d)
 
+# Go trials neutral cues
+eps2 = np.moveaxis(eps_go_neutral, [0, 1, 2], [1, 0, 2])
 
-#  Step 7 - plotting time
-#  calculate mean for condition 1 - correct trials
-cond1 = np.mean(eps[go, :, :],
-                axis=0)
-#  calculate mean for condition 2 - incorrect trials
-cond2 = np.mean(eps[nogo, :, :],
-                axis=0)
+d = defaultdict(list)
+#
+for i in np.arange(33):
+    d[epschn[i]].append(eps2[i, :, :])
 
-#  Calculate an interval of numbers to be used as the x axis in the plot
-x = np.linspace(-200,  # min time of epoch
-                800,  # max time of epoch
-                1025)  # how many samples in this period?
+sio.savemat('Kieron_data/' + participant_n + '_Go_neutral.mat', mdict=d)
 
-#  Select channel to plot
-chsel = 'Pz'
+# NoGo trials smoking cues 
+eps2 = np.moveaxis(eps_nogo_smoke, [0, 1, 2], [1, 0, 2])
 
-#  Select this channel from the Epoch data
-ch = epschn.index(chsel)
+d = defaultdict(list)
+#
+for i in np.arange(33):
+    d[epschn[i]].append(eps2[i, :, :])
 
-#  Begin pyplot
-fig, ax = plt.subplots(2, figsize=(7, 10))
+sio.savemat('Kieron_data/' + participant_n + '_NoGo_smoking.mat', mdict=d)
 
-#  plot 1 = plot both correct and incorrect epochs
-#  define line 1
-line1, = ax[0].plot(x,
-                    cond1[ch, :] * 1e6,
-                    '-',
-                    linewidth=2,
-                    label='Go (' + str(len(go)) + ')')
-#  define line 2
-line2, = ax[0].plot(x,
-                    cond2[ch, :] * 1e6,
-                    linewidth=2,
-                    label='NoGo (' + str(len(nogo)) + ')')
+# NoGo trials neutral cues
+eps2 = np.moveaxis(eps_nogo_neutral, [0, 1, 2], [1, 0, 2])
 
-#  plot settings
-#  calculate position for electrode text
-xpos = ax[0].get_xlim()[0] + (ax[0].get_xlim()[1] - ax[0].get_xlim()[0]) * 0.05
-ypos = ax[0].get_ylim()[1] - (ax[0].get_ylim()[1] - ax[0].get_ylim()[0]) * 0.1
-ax[0].text(200, ypos,
-           "N2",  # which channel to plot?
-           fontsize=15)
-ax[0].text(400, ypos,
-           "P3",  # which channel to plot?
-           fontsize=15)
-ax[0].legend(loc='lower right')
-ax[0].set_title("Go/NoGo task Participant " + participant_n + " " + chsel)
-ax[0].axvspan(175, 250, color='red', alpha=0.5)  # ROI for N2
-ax[0].axvspan(300, 500, color='red', alpha=0.5)  # ROI for P3
-ax[0].axhline(y=0, color='black', linestyle='dashed')
-ax[0].axvline(x=0, color='black', linestyle='dashed')
-ax[0].grid(False)
+d = defaultdict(list)
+#
+for i in np.arange(33):
+    d[epschn[i]].append(eps2[i, :, :])
 
-#  Plot 2 - plot the difference wave
-#  define line 3
-line3, = ax[1].plot(x,
-                    (cond2[ch, :] - cond1[ch, :]) * 1e6,
-                    linewidth=2,
-                    label='Difference')
+sio.savemat('Kieron_data/' + participant_n + '_NoGo_neutral.mat', mdict=d)
 
-#  plot settings
-#  calculate position for electrode text
-ax[1].legend(loc='lower right')
-ax[1].axvspan(175, 250, color='red', alpha=0.5)  # ROI for N2
-ax[1].axvspan(300, 500, color='red', alpha=0.5)  # ROI for P3
-ax[1].axhline(y=0, color='black', linestyle='dashed')
-ax[1].axvline(x=0, color='black', linestyle='dashed')
-ax[1].grid(False)
-
-plt.show()
-
-fig.savefig("ERP-plots/Go-NoGo/" + "GoNoGo-" +
-            participant_n + "-" + chsel + ".png", dpi=300)
