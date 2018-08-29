@@ -16,7 +16,7 @@ get_correct <- function(mat, csv, electrode){
   dat_elec <- mat[[electrode]] #subset one data frame from the list of data frames 
   # two brackets are used as one returns another list
   # two brackets returns a large array 
-  average_correct <- colMeans(dat_elec[1, correct_trials, ]) #create an average for each go trial 
+  average_correct <- colMeans(dat_elec[1, correct_trials, ], na.rm = T) #create an average for each go trial 
   return(average_correct*1e6) #returns the average (in micro volts) of each go trial along the number of samples per epoch 
 }
 
@@ -32,7 +32,7 @@ get_incorrect <- function(mat, csv, electrode){
   dat_elec <- mat[[electrode]] #subset one data frame from the list of data frames 
   # two brackets are used as one returns another list
   # two brackets returns a large array 
-  average_incorrect <- colMeans(dat_elec[1, incorrect_trials, ]) #Create an average for each NoGo trial 
+  average_incorrect <- colMeans(dat_elec[1, incorrect_trials, ], na.rm = T) #Create an average for each NoGo trial 
   return(average_incorrect*1e6) #returns the average (in micro volts) of each nogo trial along the number of samples per epoch 
 }
 
@@ -119,9 +119,9 @@ eriksen_grid <- plot_grid(individual_plot, difference_plot,
           label_x = 0.35)
 
 #  Save plot
-save_plot("Plots/Eriksen_grand.pdf", eriksen_grid, #specific function for saving plots 
-          ncol = 1,
-          nrow = 1,
-          base_aspect_ratio = 2)
+# save_plot("Plots/Eriksen_grand.pdf", eriksen_grid, #specific function for saving plots 
+#           ncol = 1,
+#           nrow = 1,
+#           base_aspect_ratio = 2)
 
   
