@@ -155,7 +155,7 @@ for filepath in filelist:
 # Create an empty matrix that has the total trial N
 # NAs are inserted as placeholders for epochs that are rejected
         retained = epochs.selection     #CHANGED
-        eps = np.empty((420,33,1025))   #CHANGED
+        eps = np.empty((420,33,1025))   #420 trials, 33 electrodes, 1025 samples
         eps[:] = np.nan                 #CHANGED
         eps[retained,:,:] = epochs._data #CHANGED
         epschn = epochs.ch_names
@@ -166,4 +166,4 @@ for filepath in filelist:
             d[epschn[ii]].append(eps3[ii,:,:])
 
 # save as .mat file for analysis in R
-        sio.savemat("Rdata/Smoking-nogo/"+os.path.splitext(filename)[0]+'.mat', mdict=d)
+        sio.savemat("Rdata/Eriksen/"+os.path.splitext(filename)[0]+'.mat', mdict=d)
