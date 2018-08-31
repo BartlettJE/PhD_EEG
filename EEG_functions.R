@@ -111,3 +111,75 @@ calculate_mean_amplitude <- function(mat.files, directory, electrode, min.trials
   }
   return(erp.averages)
 }
+
+# Functions to get the average amplitude for each trial type 
+get_correct <- function(mat, csv, electrode){
+  # Function to calculate the average amplitude for each Go trial
+  # Arguments:
+  # - mat = a matlab file from the saved file in MNE Python
+  # - csv = a .csv file from the OpenSesame trial data
+  # - electrode - which electrode would you like the data for? 
+  correct_trials <- csv$correct == 1 & csv$Block != "Practice" #this is only to select correct trials 
+  #correct_trials <- csv$Block != "Practice"
+  
+  dat_elec <- mat[[electrode]] #subset one data frame from the list of data frames 
+  # two brackets are used as one returns another list
+  # two brackets returns a large array 
+  average_correct <- colMeans(dat_elec[1, correct_trials, ], na.rm = T) #create an average for each go trial 
+  return(average_correct*1e6) #returns the average (in micro volts) of each go trial along the number of samples per epoch 
+}
+
+get_incorrect <- function(mat, csv, electrode){
+  # Function to calculate the average amplitude for each NoGo trial
+  # Arguments:
+  # - mat = a matlab file from the saved file in MNE Python
+  # - csv = a .csv file from the OpenSesame trial data
+  # - electrode - which electrode would you like the data for? 
+  incorrect_trials <- csv$correct== 0 & csv$Block != "Practice" #this is only to select NoGo trials
+  #incorrect_trials <- csv$Block != "Practice"
+  
+  dat_elec <- mat[[electrode]] #subset one data frame from the list of data frames 
+  # two brackets are used as one returns another list
+  # two brackets returns a large array 
+  average_incorrect <- colMeans(dat_elec[1, incorrect_trials, ], na.rm = T) #Create an average for each NoGo trial 
+  return(average_incorrect*1e6) #returns the average (in micro volts) of each nogo trial along the number of samples per epoch 
+}
+
+# Function to get trial number for Eriksen task
+trial_N_Eriksen <- function(csv, mat, electrode){
+  # Returns trial N for correct and incorrect trials 
+  # Arguments:
+  # csv = .csv containing trial information 
+  # mat = .mat file containing the processed EEG data
+  # electrode = select the EEG electrode to use 
+  correct_trials <- trial_info$correct == 1 & trial_info$Block != "Practice" #this is only to select correct trials 
+  
+  #correct_trials <- csv$Block != "Practice"
+  incorrect_trials <- trial_info$correct == 0 & trial_info$Block != "Practice" #this is only to select NoGo trials
+  
+  dat_elec <- mat[[electrode]] #subset one data frame from the list of data frames 
+  # two brackets are used as one returns another list
+  # two brackets returns a large array 
+  
+  # need to select the right trials
+  dat_correct <- dat_elec[1, correct_trials, ]
+  
+  # now need to remove the NaNs for rejected epochs
+  dat_correct <- na.omit(dat_correct)
+  
+  # Now for incorrect trials
+  dat_incorrect <- dat_elec[1, incorrect_trials, ]
+  
+  # remove NaNs for rejected epochs
+  dat_incorrect <- na.omit(dat_incorrect)
+  
+  # Save information for printing
+  participant <- trial_info$subject_nr[1]
+  n.correct <- nrow(dat_correct)
+  n.incorrect <- nrow(dat_incorrect)
+  
+  # Save all the trial Ns as a vector
+  participant_info <- c(participant, n.correct, n.incorrect)
+  
+  return(participant_info)
+}
