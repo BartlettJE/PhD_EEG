@@ -3,38 +3,8 @@ require(tidyverse)
 require(pracma) #function to allow the calculation of linear space for plotting 
 require(cowplot)
 
-# Functions to get the average amplitude for each trial type 
-get_correct <- function(mat, csv, electrode){
-  # Function to calculate the average amplitude for each Go trial
-  # Arguments:
-  # - mat = a matlab file from the saved file in MNE Python
-  # - csv = a .csv file from the OpenSesame trial data
-  # - electrode - which electrode would you like the data for? 
-  correct_trials <- csv$correct == 1 & csv$Block != "Practice" #this is only to select correct trials 
-  #correct_trials <- csv$Block != "Practice"
-  
-  dat_elec <- mat[[electrode]] #subset one data frame from the list of data frames 
-  # two brackets are used as one returns another list
-  # two brackets returns a large array 
-  average_correct <- colMeans(dat_elec[1, correct_trials, ], na.rm = T) #create an average for each go trial 
-  return(average_correct*1e6) #returns the average (in micro volts) of each go trial along the number of samples per epoch 
-}
-
-get_incorrect <- function(mat, csv, electrode){
-  # Function to calculate the average amplitude for each NoGo trial
-  # Arguments:
-  # - mat = a matlab file from the saved file in MNE Python
-  # - csv = a .csv file from the OpenSesame trial data
-  # - electrode - which electrode would you like the data for? 
-  incorrect_trials <- csv$correct== 0 & csv$Block != "Practice" #this is only to select NoGo trials
-  #incorrect_trials <- csv$Block != "Practice"
-  
-  dat_elec <- mat[[electrode]] #subset one data frame from the list of data frames 
-  # two brackets are used as one returns another list
-  # two brackets returns a large array 
-  average_incorrect <- colMeans(dat_elec[1, incorrect_trials, ], na.rm = T) #Create an average for each NoGo trial 
-  return(average_incorrect*1e6) #returns the average (in micro volts) of each nogo trial along the number of samples per epoch 
-}
+# Load my packages
+source("EEG_functions.R")
 
 # prepare batch processing 
 
@@ -73,6 +43,34 @@ for (i in 1:length(csv.files)){
     # I could put in some defensive coding here. 
     print(paste("participant:", csv.files[i], mat.files[i], "is complete."))
 }
+
+# Calculate how many trials were included for correct and incorrect responses 
+
+# Create empty matrix to append to 
+trial.n <- matrix(nrow = length(csv.files),
+                  ncol = 3)
+
+# Run a for loop to add the data to each matrix above 
+for (i in 1:length(csv.files)){
+  # for each file, read in the .csv trial information and .mat EEG file
+  trial_info <- read.csv(paste("Raw_data/Behavioural/Eriksen/", csv.files[i], sep = "")) 
+  mat <- readMat(paste("Rdata/Eriksen/", mat.files[i], sep = ""))
+  
+  # apply functions from above to get erps for correct and incorrect trials
+  trials_ns <- trial_N_Eriksen(mat = mat, csv = trial_info, electrode = electrode)
+  
+  # append each new matrix row to the previous one 
+  trial.n[i, ] <- trials_ns
+  
+  # print out the progress and make sure the files match up. 
+  # I could put in some defensive coding here. 
+  print(paste("participant:", substr(csv.files[i], 0, 4), "is complete."))
+}
+
+# Convert to data frame to be more informative 
+trial.n <- data.frame(trial.n)
+colnames(trial.n) <- c("Participant", "N Correct", "N Incorrect")
+
 
 # average across all of the columns to get the grand mean for correct and incorrect trials
 grand_correct <- colMeans(correct.matrix, na.rm = T) 
