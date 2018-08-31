@@ -48,7 +48,7 @@ erp.averages <- data.frame(participant,
 for (i in 1:length(csv.files)){
   # for each file, read in the .csv trial information and .mat EEG file
   trial_info <- read.csv(paste("Raw_data/Behavioural/Smoking-nogo/", csv.files[i], sep = ""))
-  dat <- readMat(paste("Rdata/Smoking-nogo/", mat.files[1], sep = ""))
+  dat <- readMat(paste("Rdata/Smoking-nogo/", mat.files[i], sep = ""))
 
   # Some defensive coding
   # Make sure the csv and mat files match up - breaks loop if they do not
