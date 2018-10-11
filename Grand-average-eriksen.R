@@ -41,7 +41,7 @@ for (i in 1:length(csv.files)){
     
     # print out the progress and make sure the files match up. 
     # I could put in some defensive coding here. 
-    print(paste("participant:", csv.files[i], mat.files[i], "is complete."))
+    print(paste("participant", substr(csv.files[i], 0, 4), "is complete."))
 }
 
 # Calculate how many trials were included for correct and incorrect responses 
@@ -64,7 +64,7 @@ for (i in 1:length(csv.files)){
   
   # print out the progress and make sure the files match up. 
   # I could put in some defensive coding here. 
-  print(paste("participant:", substr(csv.files[i], 0, 4), "is complete."))
+  print(paste("participant", substr(csv.files[i], 0, 4), "is complete."))
 }
 
 # Convert to data frame to be more informative 
