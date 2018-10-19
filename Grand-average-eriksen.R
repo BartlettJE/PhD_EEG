@@ -116,8 +116,29 @@ eriksen_grid <- plot_grid(individual_plot, difference_plot,
           nrow = 2,
           label_x = 0.35)
 
-#  Save plot
-# save_plot("Plots/Eriksen_grand.pdf", eriksen_grid, #specific function for saving plots 
+# plot for if participant wants an individual plot of their data
+# participant_plot <- ggplot() + 
+#   geom_line(mapping = aes(x = x, y = incorrect.matrix[20, ] - correct.matrix[20, ]), color = "green") + 
+#   scale_x_discrete(limits = seq(from = -200, to = 800, by = 200)) +
+#   geom_hline(yintercept = 0, linetype = 2) + 
+#   geom_vline(xintercept = 0, linetype = 2) + 
+#   theme_classic() + 
+#   annotate("rect", xmin = 25, xmax = 75, ymin = min(incorrect.matrix[20, ]), ymax = max(incorrect.matrix[20, ]),
+#            alpha = .5) +
+#   annotate("rect", xmin = 200, xmax = 400, ymin = min(incorrect.matrix[20, ]), ymax = max(incorrect.matrix[20, ]),
+#            alpha = .5) +
+#   xlab("") + 
+#   ylab(expression("Mean Amplitude"~(mu*"V"))) 
+# 
+# (participant_grid <- plot_grid(participant_plot,
+#                               difference_plot,
+#                               ncol = 1,
+#                               nrow = 2,
+#                               labels = c("Participant 1024", "All participants"),
+#                               label_x = 0.35))
+
+# # Save plot
+# save_plot("Plots/Eriksen_participant_1024.pdf", participant_grid, #specific function for saving plots
 #           ncol = 1,
 #           nrow = 1,
 #           base_aspect_ratio = 2)
