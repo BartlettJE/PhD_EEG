@@ -58,14 +58,11 @@ nogo.matrix <- matrix(ncol = 1025)
 for (i in 1:length(csv.files)){
   # for each file, read in the .csv trial information and .mat EEG file
   trial_info <- read.csv(paste("Raw_data/Behavioural/Go-NoGo/", csv.files[i], sep = "")) 
-  dat <- readMat(paste("Rdata/Go-NoGo/", mat.files[1], sep = ""))
+  dat <- readMat(paste("Rdata/Go-NoGo/", mat.files[i], sep = ""))
   
   # Some defensive coding
   # Make sure the csv and mat files match up - breaks loop if they do not
-  current.mat <- mat.files[i]
-  current.csv <- csv.files[i]
-  
-  if (substr(current.csv, 0, 4) != substr(current.mat, 0, 4)){
+  if (substr(csv.files[i], 0, 4) != substr(mat.files[i], 0, 4)){
     print(paste("The files of participant ", substr(current.csv, 0, 4), " do not match.", sep = ""))
     break
   }
