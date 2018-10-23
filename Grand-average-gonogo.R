@@ -50,11 +50,13 @@ mat.files <- list.files(path = "Rdata/Go-NoGo/",
 # Define which electrode I want to focus on out of the array of 33
 electrode = "Fz"
 
-# Create two empty matrices to append the voltage at each millisecond 
-go.matrix <- matrix(ncol = 1025)
-nogo.matrix <- matrix(ncol = 1025)
+# Create an empty object to append the data frame to 
+amplitude.dat <- NULL
 
-# Run a for loop to add the data to each matrix above 
+# Define the linear space for the x axis of the graphs 
+x = linspace(-200,800,1025)
+
+# Run a for loop to add the dataframe to the object above 
 for (i in 1:length(csv.files)){
   # for each file, read in the .csv trial information and .mat EEG file
   trial_info <- read.csv(paste("Raw_data/Behavioural/Go-NoGo/", csv.files[i], sep = "")) 
@@ -72,42 +74,51 @@ for (i in 1:length(csv.files)){
     nogo.erp <- get_nogo(mat = dat, csv = trial_info, electrode = electrode)
     
     # append each new matrix row to the previous one 
-    go.matrix <- rbind(go.matrix, go.erp)
-    nogo.matrix <- rbind(nogo.matrix, nogo.erp)
-    
+    amplitude.dat <- rbind(amplitude.dat, data.frame("subject" = substr(csv.files[i], 0, 4),
+                                                     "condition" = "Go",
+                                                     "amplitude" = go.erp,
+                                                     "time" = x))
+    amplitude.dat <- rbind(amplitude.dat, data.frame("subject" = substr(csv.files[i], 0, 4),
+                                                     "condition" = "NoGo",
+                                                     "amplitude" = nogo.erp,
+                                                     "time" = x))
+
     # print out the progress and make sure the files match up.
     print(paste("participant:", substr(csv.files[i], 0, 4), "is complete."))
   }
 }
 
-# Create a grand average by taking the mean voltage at each measurement point for all participants
-grand_go <- colMeans(go.matrix, na.rm = T) 
-grand_nogo <- colMeans(nogo.matrix, na.rm = T)
-
-# Define the linear space for the x axis of the graphs 
-x = linspace(-200,800,1025)
 
 # Create a plot with both go and nogo waves 
-ggplot() + 
-  geom_line(mapping = aes(x = x, y = grand_go), color = "green") + 
-  geom_line(mapping = aes(x = x, y = grand_nogo), color = "red") + 
+amplitude.dat %>% 
+  ggplot(aes(x = time, y = amplitude)) + 
+  stat_summary(aes(group = interaction(subject, condition), colour = condition),
+               fun.y = mean,
+               geom = "line",
+               size = 1,
+               alpha = 0.3) + 
+  stat_summary(aes(group = condition, colour = condition),
+               fun.y = mean,
+               geom = "line",
+               size = 1,
+               alpha = 1) + 
   scale_x_discrete(limits = seq(from = -200, to = 800, by = 200)) +
   geom_hline(yintercept = 0, linetype = 2) + 
   geom_vline(xintercept = 0, linetype = 2) + 
-  theme_classic() + 
-  xlab("") + 
+  xlab("Time (ms)") + 
   ylab(expression("Mean amplitude"~(mu*"V")))
 
+# fix later to get difference plot 
 # Create a plot with the difference wave
-ggplot() + 
-  geom_line(mapping = aes(x = x, y = grand_nogo - grand_go), color = "red") + 
-  scale_x_discrete(limits = seq(from = -200, to = 800, by = 200)) +
-  geom_hline(yintercept = 0, linetype = 2) + 
-  geom_vline(xintercept = 0, linetype = 2) + 
-  theme_classic() + 
-  annotate("rect", xmin = 175, xmax = 250, ymin = -2, ymax = 3,
-           alpha = .5) + 
-  annotate("rect", xmin = 300, xmax = 500, ymin = -2, ymax = 3,
-           alpha = .5) + 
-  xlab("") + 
-  ylab(expression("Mean amplitude"~(mu*"V")))
+# ggplot() + 
+#   geom_line(mapping = aes(x = x, y = grand_nogo - grand_go), color = "red") + 
+#   scale_x_discrete(limits = seq(from = -200, to = 800, by = 200)) +
+#   geom_hline(yintercept = 0, linetype = 2) + 
+#   geom_vline(xintercept = 0, linetype = 2) + 
+#   theme_classic() + 
+#   annotate("rect", xmin = 175, xmax = 250, ymin = -2, ymax = 3,
+#            alpha = .5) + 
+#   annotate("rect", xmin = 300, xmax = 500, ymin = -2, ymax = 3,
+#            alpha = .5) + 
+#   xlab("") + 
+#   ylab(expression("Mean amplitude"~(mu*"V")))
