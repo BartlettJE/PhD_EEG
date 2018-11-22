@@ -21,28 +21,89 @@ mat.files <- list.files(path = "Rdata/Eriksen/",
 # Define which electrode I want to focus on out of the array of 33
 electrode = "Fz"
 
-# Create two empty matrices to append the voltage at each millisecond 
-correct.matrix <- matrix(ncol = 1025)
-incorrect.matrix <- matrix(ncol = 1025)
+# Create an empty object to append the data frame to 
+amplitude.dat <- NULL
 
-# Run a for loop to add the data to each matrix above 
-for (i in 1:length(csv.files)){
-    # for each file, read in the .csv trial information and .mat EEG file
-    trial_info <- read.csv(paste("Raw_data/Behavioural/Eriksen/", csv.files[i], sep = "")) 
-    dat <- readMat(paste("Rdata/Eriksen/", mat.files[i], sep = ""))
-    
+# Define the linear space for the x axis of the graphs 
+x = linspace(-200,800,1025)
+
+# Run a for loop to add the data to each matrix above
+for (i in 1:length(csv.files)) {
+  # for each file, read in the .csv trial information and .mat EEG file
+  trial_info <- read.csv(paste("Raw_data/Behavioural/Eriksen/", csv.files[i], sep = ""))
+  dat <- readMat(paste("Rdata/Eriksen/", mat.files[i], sep = ""))
+  
+  # Some defensive coding
+  # Make sure the csv and mat files match up - breaks loop if they do not
+  if (substr(csv.files[i], 0, 4) != substr(mat.files[i], 0, 4)) {
+    print(paste("The files of participant ", substr(csv.files[i], 0, 4), " do not match.", sep = ""))
+    break
+  }
+  else{
+    #if all is good, start processing the files
     # apply functions from above to get erps for correct and incorrect trials
-    correct.erp <- get_correct(mat = dat, csv = trial_info, electrode = electrode)
-    incorrect.erp <- get_incorrect(mat = dat, csv = trial_info, electrode = electrode)
-
-    # append each new matrix row to the previous one 
-    correct.matrix <- rbind(correct.matrix, correct.erp)
-    incorrect.matrix <- rbind(incorrect.matrix, incorrect.erp)
+    correct.erp <-
+      get_correct(mat = dat,
+                  csv = trial_info,
+                  electrode = electrode)
+    incorrect.erp <-
+      get_incorrect(mat = dat,
+                    csv = trial_info,
+                    electrode = electrode)
     
-    # print out the progress and make sure the files match up. 
-    # I could put in some defensive coding here. 
+    # append each new matrix row to the previous one
+    amplitude.dat <-
+      rbind(
+        amplitude.dat,
+        data.frame(
+          "subject" = substr(csv.files[i], 0, 4),
+          "response" = "correct",
+          "amplitude" = correct.erp,
+          "time" = x
+        )
+      )
+    amplitude.dat <-
+      rbind(
+        amplitude.dat,
+        data.frame(
+          "subject" = substr(csv.files[i], 0, 4),
+          "response" = "incorrect",
+          "amplitude" = incorrect.erp,
+          "time" = x
+        )
+      )
+    
+    # print out the progress and make sure the files match up.
+    # I could put in some defensive coding here.
     print(paste("participant", substr(csv.files[i], 0, 4), "is complete."))
+  }
 }
+
+# Add smoking group 
+amplitude.dat <- amplitude.dat %>% 
+  mutate(smoking_group = ifelse(substr(subject, 0, 1) == 1, 
+                                "Non-Smoker", # if 1, non-smoker
+                                "Smoker")) # if 2, smoker
+
+# Create a plot with both go and nogo waves
+amplitude.dat %>% 
+  ggplot(aes(x = time, y = amplitude)) + 
+  facet_grid(~smoking_group) + 
+  stat_summary(aes(group = interaction(smoking_group, subject, response), colour = response),
+               fun.y = mean,
+               geom = "line",
+               size = 1,
+               alpha = 0.3) + 
+  stat_summary(aes(group = response, colour = response),
+               fun.y = mean,
+               geom = "line",
+               size = 1,
+               alpha = 1) + 
+  scale_x_discrete(limits = seq(from = -200, to = 800, by = 200)) +
+  geom_hline(yintercept = 0, linetype = 2) + 
+  geom_vline(xintercept = 0, linetype = 2) + 
+  xlab("Time (ms)") + 
+  ylab(expression("Mean amplitude"~(mu*"V")))
 
 # Calculate how many trials were included for correct and incorrect responses 
 
