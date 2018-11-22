@@ -121,29 +121,38 @@ for filepath in filelist:
                 i = i + 1
                 exclude_component = input("Type single component to exclude: ")
             excludelist = excludelist.append(df)
-            excludelist.to_csv("Eriksen.csv", index=False)
+            excludelist.to_csv("Gonogo.csv", index=False)
 
         ica.exclude.extend(eog_inds[1:])
 
 # exclude chosen ICA components
         ica.apply(raw)
 
+# specify extreme voltage threshold
+        reject = dict(eeg=100e-6)   #CHANGED
+
 # Create epochs of the data
         epochs = mne.Epochs(raw, events, event_id,
         tmin=-0.2, tmax=0.8,
         proj=True, picks=pickseeg,
         baseline=(-0.2, 0),
+        reject = reject,    #CHANGED
         preload=True)
 
         del raw
 
-        eps = epochs._data
+# Create an empty matrix that has the total trial N
+# NAs are inserted as placeholders for epochs that are rejected
+        retained = epochs.selection     #CHANGED
+        eps = np.empty((420,33,1025))   #420 trials, 33 electrodes, 1025 samples
+        eps[:] = np.nan                 #CHANGED
+        eps[retained,:,:] = epochs._data #CHANGED
         epschn = epochs.ch_names
         eps3 = np.moveaxis(eps,[0,1,2],[1,0,2])
 
         d = defaultdict(list)
-        for i in np.arange(33):
-            d[epschn[i]].append(eps3[i,:,:])
+        for ii in np.arange(33):
+            d[epschn[ii]].append(eps3[ii,:,:])
 
 # save as .mat file for analysis in R
         sio.savemat("Rdata/Go-NoGo/"+os.path.splitext(filename)[0]+'.mat', mdict=d)
