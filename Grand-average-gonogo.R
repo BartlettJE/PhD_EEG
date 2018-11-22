@@ -3,40 +3,9 @@ require(tidyverse)
 require(pracma) #function to allow the calculation of linear space for plotting 
 require(cowplot)
 
-# Functions to get the average amplitude for each trial type 
-get_go <- function(mat, csv, electrode){
-  # Function to calculate the average amplitude for each Go trial
-  # Arguments:
-  # - mat = a matlab file from the saved file in MNE Python
-  # - csv = a .csv file from the OpenSesame trial data
-  # - electrode - which electrode would you like the data for? 
-  go_trials <- csv$Stim_type == "Go" & csv$Block != "Practice" #this is only to select correct trials 
-  
-  dat_elec <- mat[[electrode]] #subset one data frame from the list of data frames 
-  # two brackets are used as one returns another list
-  # two brackets returns a large array 
-  average_correct <- colMeans(dat_elec[1, go_trials, ]) #create an average for each go trial 
-  return(average_correct*1e6) #returns the average (in micro volts) of each go trial along the number of samples per epoch 
-}
-
-get_nogo <- function(mat, csv, electrode){
-  # Function to calculate the average amplitude for each NoGo trial
-  # Arguments:
-  # - mat = a matlab file from the saved file in MNE Python
-  # - csv = a .csv file from the OpenSesame trial data
-  # - electrode - which electrode would you like the data for? 
-  nogo_trials <- csv$Stim_type== "NoGo" & csv$Block != "Practice" #this is only to select NoGo trials
-  #incorrect_trials <- csv$Block != "Practice"
-  
-  dat_elec <- mat[[electrode]] #subset one data frame from the list of data frames 
-  # two brackets are used as one returns another list
-  # two brackets returns a large array 
-  average_incorrect <- colMeans(dat_elec[1, nogo_trials, ]) #Create an average for each NoGo trial 
-  return(average_incorrect*1e6) #returns the average (in micro volts) of each nogo trial along the number of samples per epoch 
-}
+source("EEG_functions.R")
 
 # prepare batch processing 
-
 # read a list of .csv (experiment data) to append later 
 csv.files <- list.files(path = "Raw_data/Behavioural/Go-NoGo/",
                         pattern = "*.csv",
@@ -50,6 +19,44 @@ mat.files <- list.files(path = "Rdata/Go-NoGo/",
 # Define which electrode I want to focus on out of the array of 33
 electrode = "Fz"
 
+
+# Calculate how many trials were included for go and nogo trials 
+# Create empty matrix to append to 
+trial.n <- matrix(nrow = length(csv.files),
+                  ncol = 3)
+
+# Run a for loop to add the data to each matrix above 
+for (i in 1:length(csv.files)){
+  # for each file, read in the .csv trial information and .mat EEG file
+  trial_info <- read.csv(paste("Raw_data/Behavioural/Go-NoGo/", csv.files[i], sep = "")) 
+  mat <- readMat(paste("Rdata/Go-NoGo/", mat.files[i], sep = ""))
+  
+  # recode correct response to make nogo informative 
+  trial_info <- trial_info %>%
+    mutate(correct = ifelse(Stim_type == "Go" & response == "x", 1, 
+                              ifelse(Stim_type == "NoGo" & response == "None", 1,
+                                     0))) 
+  
+  # apply functions from above to get erps for correct and incorrect trials
+  trials_ns <- trial_N_gonogo(mat = mat, csv = trial_info, electrode = electrode)
+  
+  # append each new matrix row to the previous one 
+  trial.n[i, ] <- trials_ns
+  
+  # print out the progress and make sure the files match up. 
+  # I could put in some defensive coding here. 
+  print(paste("participant", substr(csv.files[i], 0, 4), "is complete."))
+}
+
+# Convert to data frame to be more informative 
+trial.n <- data.frame(trial.n)
+colnames(trial.n) <- c("Participant", "N_Go", "N_Nogo")
+
+trial.n <- trial.n %>% 
+  mutate(included = ifelse (N_Go < 20, 0, 
+                            ifelse(N_Nogo < 20, 0, 
+                                   1)))
+
 # Create an empty object to append the data frame to 
 amplitude.dat <- NULL
 
@@ -62,10 +69,15 @@ for (i in 1:length(csv.files)){
   trial_info <- read.csv(paste("Raw_data/Behavioural/Go-NoGo/", csv.files[i], sep = "")) 
   dat <- readMat(paste("Rdata/Go-NoGo/", mat.files[i], sep = ""))
   
+  # recode correct response to make nogo informative 
+  trial_info <- trial_info %>%
+    mutate(correct = ifelse(Stim_type == "Go" & response == "x", 1, 
+                            ifelse(Stim_type == "NoGo" & response == "None", 1,
+                                   0))) 
   # Some defensive coding
   # Make sure the csv and mat files match up - breaks loop if they do not
   if (substr(csv.files[i], 0, 4) != substr(mat.files[i], 0, 4)){
-    print(paste("The files of participant ", substr(current.csv, 0, 4), " do not match.", sep = ""))
+    print(paste("The files of participant ", substr(csv.files[i], 0, 4), " do not match.", sep = ""))
     break
   }
   else{ #if all is good, start processing the files
@@ -88,11 +100,17 @@ for (i in 1:length(csv.files)){
   }
 }
 
+# Add smoking group 
+amplitude.dat <- amplitude.dat %>% 
+  mutate(smoking_group = ifelse(substr(subject, 0, 1) == 1, 
+                                "Non-Smoker", # if 1, non-smoker
+                                "Smoker")) # if 2, smoker
 
 # Create a plot with both go and nogo waves 
 amplitude.dat %>% 
   ggplot(aes(x = time, y = amplitude)) + 
-  stat_summary(aes(group = interaction(subject, condition), colour = condition),
+  facet_grid(~smoking_group) + 
+  stat_summary(aes(group = interaction(smoking_group, subject, condition), colour = condition),
                fun.y = mean,
                geom = "line",
                size = 1,
