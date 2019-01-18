@@ -2,6 +2,7 @@ require(R.matlab) #function to be able to read matlab files - EEG data saved fro
 require(tidyverse)
 require(pracma) #function to allow the calculation of linear space for plotting 
 require(cowplot)
+require(readbulk)
 
 # Load my packages
 source("EEG_functions.R")
@@ -20,9 +21,6 @@ mat.files <- list.files(path = "Rdata/Eriksen/",
 
 # Define which electrode I want to focus on out of the array of 33
 electrode = "Fz"
-
-# Create an empty object to append the data frame to 
-amplitude.dat <- NULL
 
 # Define the linear space for the x axis of the graphs 
 x = linspace(-200,800,1025)
@@ -52,26 +50,13 @@ for (i in 1:length(csv.files)) {
                     electrode = electrode)
     
     # append each new matrix row to the previous one
-    amplitude.dat <-
-      rbind(
-        amplitude.dat,
-        data.frame(
-          "subject" = substr(csv.files[i], 0, 4),
-          "response" = "correct",
-          "amplitude" = correct.erp,
-          "time" = x
-        )
-      )
-    amplitude.dat <-
-      rbind(
-        amplitude.dat,
-        data.frame(
-          "subject" = substr(csv.files[i], 0, 4),
-          "response" = "incorrect",
-          "amplitude" = incorrect.erp,
-          "time" = x
-        )
-      )
+    amplitude.dat <- data.frame(
+      "subject" = substr(csv.files[i], 0, 4),
+      "response" = c(rep("correct", 1025), rep("incorrect", 1025)),
+      "amplitude" = c(correct.erp, incorrect.erp),
+      "time" = rep(x, 2)
+    )
+    write.csv(amplitude.dat, paste("processed_data/eriksen/", substr(csv.files[i], 0, 4), "-eriksen.csv", sep = ""))
     
     # print out the progress and make sure the files match up.
     # I could put in some defensive coding here.
@@ -79,11 +64,15 @@ for (i in 1:length(csv.files)) {
   }
 }
 
+
+# Read in processed data from file 
+amplitude.dat <- read_bulk(directory = "processed_data/eriksen/",
+                           extension = ".csv")
+
 # Add smoking group 
 amplitude.dat <- amplitude.dat %>% 
-  mutate(smoking_group = ifelse(substr(subject, 0, 1) == 1, 
-                                "Non-Smoker", # if 1, non-smoker
-                                "Smoker")) # if 2, smoker
+  mutate(smoking_group = case_when(substr(subject, 0, 1) == 1 ~ "Non-Smoker",
+                                   substr(subject, 0, 1) == 2 ~ "Smoker"))
 
 # Create a plot with both go and nogo waves
 amplitude.dat %>% 
