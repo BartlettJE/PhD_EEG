@@ -64,37 +64,8 @@ for (i in 1:length(csv.files)) {
   }
 }
 
-
-# Read in processed data from file 
-amplitude.dat <- read_bulk(directory = "processed_data/eriksen/",
-                           extension = ".csv")
-
-# Add smoking group 
-amplitude.dat <- amplitude.dat %>% 
-  mutate(smoking_group = case_when(substr(subject, 0, 1) == 1 ~ "Non-Smoker",
-                                   substr(subject, 0, 1) == 2 ~ "Smoker"))
-
-# Create a plot with both go and nogo waves
-amplitude.dat %>% 
-  ggplot(aes(x = time, y = amplitude)) + 
-  facet_grid(~smoking_group) + 
-  stat_summary(aes(group = interaction(smoking_group, subject, response), colour = response),
-               fun.y = mean,
-               geom = "line",
-               size = 1,
-               alpha = 0.3) + 
-  stat_summary(aes(group = response, colour = response),
-               fun.y = mean,
-               geom = "line",
-               size = 1,
-               alpha = 1) + 
-  scale_x_discrete(limits = seq(from = -200, to = 800, by = 200)) +
-  geom_hline(yintercept = 0, linetype = 2) + 
-  geom_vline(xintercept = 0, linetype = 2) + 
-  xlab("Time (ms)") + 
-  ylab(expression("Mean amplitude"~(mu*"V")))
-
 # Calculate how many trials were included for correct and incorrect responses 
+# Participants will only be included with > 8 trials in both conditions 
 
 # Create empty matrix to append to 
 trial.n <- matrix(nrow = length(csv.files),
@@ -119,78 +90,70 @@ for (i in 1:length(csv.files)){
 
 # Convert to data frame to be more informative 
 trial.n <- data.frame(trial.n)
-colnames(trial.n) <- c("Participant", "N Correct", "N Incorrect")
+colnames(trial.n) <- c("participant", "n_correct", "n_incorrect")
 
+# Add eligible column for n trials > 8 in each condition
+trial.n <- trial.n %>% 
+  mutate(included = case_when(n_correct & n_incorrect > 7 ~ 1,
+                              n_correct & n_incorrect < 8 ~ 0))
 
-# average across all of the columns to get the grand mean for correct and incorrect trials
-grand_correct <- colMeans(correct.matrix, na.rm = T) 
-grand_incorrect <- colMeans(incorrect.matrix, na.rm = T)
+# Read in processed data from file 
+amplitude.dat <- read_bulk(directory = "processed_data/eriksen/",
+                           extension = ".csv")
 
-# Create linear space for x axis 
-x = linspace(-200,800,1025)
+# append eligible or not 
+amplitude.dat <- left_join(amplitude.dat, trial.n,
+            by = c("subject" = "participant")) %>% 
 
-# Create plots
-# plot 1 = separate lines for each waveform
-individual_plot <- ggplot() + 
-  geom_line(mapping = aes(x = x, y = grand_correct), color = "green") + 
-  geom_line(mapping = aes(x = x, y = grand_incorrect), color = "red") + 
+  # Add smoking group 
+amplitude.dat <- amplitude.dat %>% 
+  mutate(smoking_group = case_when(substr(subject, 0, 1) == 1 ~ "Non-Smoker",
+                                   substr(subject, 0, 1) == 2 ~ "Smoker")) %>% 
+  filter(included == 1) # remove any Ss with < 8 trials in each condition
+
+# Create difference wave: incorrect - correct trials 
+difference_wave <- amplitude.dat %>% 
+  select(-X) %>% 
+  spread(key = response, value = amplitude) %>% 
+  mutate(difference = incorrect - correct)
+
+# Create constant colour scheme for all plots 
+difference_wave$smoking_group <- factor(difference_wave$smoking_group, 
+                                       levels = c("Non-Smoker", "Smoker"),
+                                       labels = c("Non-Smoker", "Smoker"))
+
+group.cols <- c("#1f78b4", "#b2df8a")
+
+names(group.cols) <- (levels(difference_wave$smoking_group))
+
+colScale <- scale_color_manual(name = "Smoking group", values = group.cols)
+
+# Create difference wave plot 
+
+difference_wave %>% 
+  ggplot(aes(x = time, y = difference)) + 
+  facet_grid(~smoking_group) + 
+  stat_summary(aes(group = interaction(smoking_group, subject), color = smoking_group),
+               fun.y = mean,
+               geom = "line",
+               size = 1,
+               alpha = 0.2) + 
+  stat_summary(aes(group = smoking_group, color = smoking_group),
+               fun.y = mean,
+               geom = "line",
+               size = 1,
+               alpha = 1) + 
+  # stat_summary(data = subset(amplitude.dat2, subject == 2014), # optional label participant
+  #              fun.y = mean,
+  #              geom = "line",
+  #              color = "black",
+  #              size = 1,
+  #              alpha = 1) +
   scale_x_discrete(limits = seq(from = -200, to = 800, by = 200)) +
+  scale_y_continuous(limits = c(-10, 25),
+                     breaks = seq(-10, 25, 5)) + 
   geom_hline(yintercept = 0, linetype = 2) + 
   geom_vline(xintercept = 0, linetype = 2) + 
-  theme_classic() + 
-  annotate("rect", xmin = 25, xmax = 75, ymin = min(grand_incorrect), ymax = max(grand_incorrect),
-           alpha = .5) + 
-  annotate("rect", xmin = 200, xmax = 400, ymin = min(grand_incorrect), ymax = max(grand_incorrect),
-           alpha = .5) +
-  xlab("") + 
-  ylab(expression("Mean Amplitude"~(mu*"V"))) 
-
-# plot 2 = difference wave to make it easier to interpret 
-difference_plot <- ggplot() + 
-  geom_line(mapping = aes(x = x, y = grand_incorrect - grand_correct), color = "black") + 
-  scale_x_discrete(limits = seq(from = -200, to = 800, by = 200)) +
-  geom_hline(yintercept = 0, linetype = 2) + 
-  geom_vline(xintercept = 0, linetype = 2) + 
-  theme_classic() + 
-  annotate("rect", xmin = 25, xmax = 75, ymin = min(grand_incorrect - grand_correct), ymax = max(grand_incorrect - grand_correct),
-           alpha = .5) + 
-  annotate("rect", xmin = 200, xmax = 400,ymin = min(grand_incorrect - grand_correct), ymax = max(grand_incorrect - grand_correct),
-           alpha = .5) +
-  theme_classic() + 
   xlab("Time (ms)") + 
-  ylab(expression("Mean Amplitude"~(mu*"V"))) 
-
-# arrange the plots in a grid to present together 
-eriksen_grid <- plot_grid(individual_plot, difference_plot,
-          ncol = 1,
-          nrow = 2,
-          label_x = 0.35)
-
-# plot for if participant wants an individual plot of their data
-# participant_plot <- ggplot() + 
-#   geom_line(mapping = aes(x = x, y = incorrect.matrix[20, ] - correct.matrix[20, ]), color = "green") + 
-#   scale_x_discrete(limits = seq(from = -200, to = 800, by = 200)) +
-#   geom_hline(yintercept = 0, linetype = 2) + 
-#   geom_vline(xintercept = 0, linetype = 2) + 
-#   theme_classic() + 
-#   annotate("rect", xmin = 25, xmax = 75, ymin = min(incorrect.matrix[20, ]), ymax = max(incorrect.matrix[20, ]),
-#            alpha = .5) +
-#   annotate("rect", xmin = 200, xmax = 400, ymin = min(incorrect.matrix[20, ]), ymax = max(incorrect.matrix[20, ]),
-#            alpha = .5) +
-#   xlab("") + 
-#   ylab(expression("Mean Amplitude"~(mu*"V"))) 
-# 
-# (participant_grid <- plot_grid(participant_plot,
-#                               difference_plot,
-#                               ncol = 1,
-#                               nrow = 2,
-#                               labels = c("Participant 1024", "All participants"),
-#                               label_x = 0.35))
-
-# # Save plot
-# save_plot("Plots/Eriksen_participant_1024.pdf", participant_grid, #specific function for saving plots
-#           ncol = 1,
-#           nrow = 1,
-#           base_aspect_ratio = 2)
-
-  
+  ylab(expression("Mean amplitude"~(mu*"V"))) + 
+  colScale
