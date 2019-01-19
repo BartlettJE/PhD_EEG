@@ -20,7 +20,7 @@ mat.files <- list.files(path = "Rdata/Eriksen/",
                         full.names = F)
 
 # Define which electrode I want to focus on out of the array of 33
-electrode = "Fz"
+electrode = "Cz"
 
 # Define the linear space for the x axis of the graphs 
 x = linspace(-200,800,1025)
@@ -52,11 +52,17 @@ for (i in 1:length(csv.files)) {
     # append each new matrix row to the previous one
     amplitude.dat <- data.frame(
       "subject" = substr(csv.files[i], 0, 4),
+      "electrode" = electrode,
       "response" = c(rep("correct", 1025), rep("incorrect", 1025)),
       "amplitude" = c(correct.erp, incorrect.erp),
       "time" = rep(x, 2)
     )
-    write.csv(amplitude.dat, paste("processed_data/eriksen/", substr(csv.files[i], 0, 4), "-eriksen.csv", sep = ""))
+    write.csv(amplitude.dat, paste("processed_data/eriksen/", 
+                                   substr(csv.files[i], 0, 4),
+                                   "-",
+                                   electrode,
+                                   "-eriksen.csv", 
+                                   sep = ""))
     
     # print out the progress and make sure the files match up.
     # I could put in some defensive coding here.
@@ -103,7 +109,7 @@ amplitude.dat <- read_bulk(directory = "processed_data/eriksen/",
 
 # append eligible or not 
 amplitude.dat <- left_join(amplitude.dat, trial.n,
-            by = c("subject" = "participant")) %>% 
+            by = c("subject" = "participant")) 
 
   # Add smoking group 
 amplitude.dat <- amplitude.dat %>% 
@@ -118,27 +124,27 @@ difference_wave <- amplitude.dat %>%
   mutate(difference = incorrect - correct)
 
 # Create constant colour scheme for all plots 
-difference_wave$smoking_group <- factor(difference_wave$smoking_group, 
-                                       levels = c("Non-Smoker", "Smoker"),
-                                       labels = c("Non-Smoker", "Smoker"))
+difference_wave$electrode <- factor(difference_wave$electrode, 
+                                    levels = c("Cz", "Fz", "Pz"),
+                                    labels = c("Cz", "Fz", "Pz"))
 
-group.cols <- c("#1f78b4", "#b2df8a")
+group.cols <- c("#a6cee3", "#1f78b4", "#b2df8a")
 
-names(group.cols) <- (levels(difference_wave$smoking_group))
+names(group.cols) <- (levels(difference_wave$electrode))
 
-colScale <- scale_color_manual(name = "Smoking group", values = group.cols)
+colScale <- scale_color_manual(name = "Electrode", values = group.cols)
 
 # Create difference wave plot 
 
-difference_wave %>% 
+(grand_average <- difference_wave %>% 
   ggplot(aes(x = time, y = difference)) + 
   facet_grid(~smoking_group) + 
-  stat_summary(aes(group = interaction(smoking_group, subject), color = smoking_group),
-               fun.y = mean,
-               geom = "line",
-               size = 1,
-               alpha = 0.2) + 
-  stat_summary(aes(group = smoking_group, color = smoking_group),
+  # stat_summary(aes(group = interaction(smoking_group, subject), color = smoking_group),
+  #              fun.y = mean,
+  #              geom = "line",
+  #              size = 1,
+  #              alpha = 0.2) + 
+  stat_summary(aes(group = interaction(smoking_group, electrode), color = electrode),
                fun.y = mean,
                geom = "line",
                size = 1,
@@ -150,10 +156,10 @@ difference_wave %>%
   #              size = 1,
   #              alpha = 1) +
   scale_x_discrete(limits = seq(from = -200, to = 800, by = 200)) +
-  scale_y_continuous(limits = c(-10, 25),
-                     breaks = seq(-10, 25, 5)) + 
+  scale_y_continuous(limits = c(-15, 25),
+                     breaks = seq(-15, 25, 5)) + 
   geom_hline(yintercept = 0, linetype = 2) + 
   geom_vline(xintercept = 0, linetype = 2) + 
   xlab("Time (ms)") + 
   ylab(expression("Mean amplitude"~(mu*"V"))) + 
-  colScale
+  colScale)
