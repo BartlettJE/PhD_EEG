@@ -136,7 +136,7 @@ colScale <- scale_color_manual(name = "Electrode", values = group.cols)
 
 # Create difference wave plot 
 
-(grand_average <- difference_wave %>% 
+(grand_difference <- difference_wave %>% 
   ggplot(aes(x = time, y = difference)) + 
   facet_grid(~smoking_group) + 
   # stat_summary(aes(group = interaction(smoking_group, subject), color = smoking_group),
@@ -163,3 +163,9 @@ colScale <- scale_color_manual(name = "Electrode", values = group.cols)
   xlab("Time (ms)") + 
   ylab(expression("Mean amplitude"~(mu*"V"))) + 
   colScale)
+
+# Save plot
+save_plot(filename = "ERP-plots/Grand_average_eriksen.pdf",
+          plot = grand_difference,
+          base_height = 6,
+          base_width = 14)
