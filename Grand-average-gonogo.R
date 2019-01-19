@@ -138,7 +138,7 @@ names(group.cols) <- (levels(difference_wave$electrode))
 colScale <- scale_color_manual(name = "Electrode", values = group.cols)
 
 # Create a plot with both go and nogo waves 
-difference_wave %>% 
+(grand_difference <- difference_wave %>% 
   ggplot(aes(x = time, y = difference)) + 
   facet_grid(~smoking_group) + 
   # stat_summary(aes(group = interaction(smoking_group, subject), colour = smoking_group),
@@ -158,5 +158,10 @@ difference_wave %>%
   ylab(expression("Mean amplitude"~(mu*"V"))) +
   scale_y_continuous(limits = c(-10, 15),
                      breaks = seq(-10, 15, 5)) + 
-  colScale
+  colScale)
 
+# Save plot
+save_plot(filename = "ERP-plots/Grand_average_gonogo.pdf",
+          plot = grand_difference,
+          base_height = 6,
+          base_width = 14)
