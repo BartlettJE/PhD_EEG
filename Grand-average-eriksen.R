@@ -41,13 +41,15 @@ for (i in 1:length(csv.files)) {
     #if all is good, start processing the files
     # apply functions from above to get erps for correct and incorrect trials
     correct.erp <-
-      get_correct(mat = dat,
+      eriksen_erp(mat = dat,
                   csv = trial_info,
-                  electrode = electrode)
+                  electrode = electrode,
+                  correct = 1)
     incorrect.erp <-
-      get_incorrect(mat = dat,
-                    csv = trial_info,
-                    electrode = electrode)
+      eriksen_erp(mat = dat,
+                  csv = trial_info,
+                  electrode = electrode,
+                  correct = 0)
     
     # append each new matrix row to the previous one
     amplitude.dat <- data.frame(
