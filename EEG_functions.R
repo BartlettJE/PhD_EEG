@@ -1,33 +1,18 @@
 # Functions to get the average amplitude for each trial type 
-get_go <- function(mat, csv, electrode){
+gonogo_erp <- function(mat, csv, electrode, stim_type){
   # Function to calculate the average amplitude for each Go trial
   # Arguments:
   # - mat = a matlab file from the saved file in MNE Python
   # - csv = a .csv file from the OpenSesame trial data
   # - electrode - which electrode would you like the data for? 
-  go_trials <- trial_info$correct == 1 & csv$Stim_type == "Go" & csv$Block != "Practice" #this is only to select correct trials 
+  # - stim_type - "Go" or "NoGo" trials
+  trials <- trial_info$correct == 1 & csv$Stim_type == stim_type & csv$Block != "Practice" #this is only to select correct trials 
   
   dat_elec <- mat[[electrode]] #subset one data frame from the list of data frames 
   # two brackets are used as one returns another list
   # two brackets returns a large array 
-  average_correct <- colMeans(dat_elec[1, go_trials, ], na.rm = T) #create an average for each go trial 
+  average_correct <- colMeans(dat_elec[1, trials, ], na.rm = T) #create an average for each go trial 
   return(average_correct*1e6) #returns the average (in micro volts) of each go trial along the number of samples per epoch 
-}
-
-get_nogo <- function(mat, csv, electrode){
-  # Function to calculate the average amplitude for each NoGo trial
-  # Arguments:
-  # - mat = a matlab file from the saved file in MNE Python
-  # - csv = a .csv file from the OpenSesame trial data
-  # - electrode - which electrode would you like the data for? 
-  nogo_trials <- trial_info$correct == 1 & csv$Stim_type== "NoGo" & csv$Block != "Practice" #this is only to select NoGo trials
-  #incorrect_trials <- csv$Block != "Practice"
-  
-  dat_elec <- mat[[electrode]] #subset one data frame from the list of data frames 
-  # two brackets are used as one returns another list
-  # two brackets returns a large array 
-  average_incorrect <- colMeans(dat_elec[1, nogo_trials, ], na.rm = T) #Create an average for each NoGo trial 
-  return(average_incorrect*1e6) #returns the average (in micro volts) of each nogo trial along the number of samples per epoch 
 }
 
 # Calculate ERP from individual mat files 
