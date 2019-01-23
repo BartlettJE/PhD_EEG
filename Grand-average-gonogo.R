@@ -42,8 +42,8 @@ for (i in 1:length(csv.files)){
   }
   else{ #if all is good, start processing the files
     # apply functions from above to get erps for correct and incorrect trials
-    go.erp <- get_go(mat = dat, csv = trial_info, electrode = electrode)
-    nogo.erp <- get_nogo(mat = dat, csv = trial_info, electrode = electrode)
+    go.erp <- gonogo_erp(mat = dat, csv = trial_info, electrode = electrode, stim_type = "Go")
+    nogo.erp <- gonogo_erp(mat = dat, csv = trial_info, electrode = electrode, stim_type = "NoGo")
     
     # append each new matrix row to the previous one 
     amplitude.dat <- data.frame(
