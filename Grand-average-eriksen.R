@@ -20,7 +20,7 @@ mat.files <- list.files(path = "Rdata/Eriksen/",
                         full.names = F)
 
 # Define which electrode I want to focus on out of the array of 33
-electrode = "Cz"
+electrode = "Pz"
 
 # Define the linear space for the x axis of the graphs 
 x = linspace(-200,800,1025)
@@ -138,9 +138,13 @@ colScale <- scale_color_manual(name = "Electrode", values = group.cols)
 
 # Create difference wave plot 
 
+# Subset data for when I want to show individual data
+# subject <- 2016
+# difference_wave2 <- subset(difference_wave, subject == 2016)
+
 (grand_difference <- difference_wave %>% 
   ggplot(aes(x = time, y = difference)) + 
-  facet_grid(~smoking_group) + 
+  facet_grid(electrode~smoking_group) + 
   # stat_summary(aes(group = interaction(smoking_group, subject), color = smoking_group),
   #              fun.y = mean,
   #              geom = "line",
@@ -151,7 +155,7 @@ colScale <- scale_color_manual(name = "Electrode", values = group.cols)
                geom = "line",
                size = 1,
                alpha = 1) + 
-  # stat_summary(data = subset(amplitude.dat2, subject == 2014), # optional label participant
+  # stat_summary(data = difference_wave2, # optional label participant
   #              fun.y = mean,
   #              geom = "line",
   #              color = "black",
@@ -160,14 +164,28 @@ colScale <- scale_color_manual(name = "Electrode", values = group.cols)
   scale_x_discrete(limits = seq(from = -200, to = 800, by = 200)) +
   scale_y_continuous(limits = c(-15, 25),
                      breaks = seq(-15, 25, 5)) + 
+  annotate("rect", xmin = 25, xmax = 75, ymin = -15, ymax = 25, alpha = 0.3) + #ERN
+  annotate("rect", xmin = 200, xmax = 400, ymin = -15, ymax = 25, alpha = 0.3) + #Pe
   geom_hline(yintercept = 0, linetype = 2) + 
   geom_vline(xintercept = 0, linetype = 2) + 
+  theme(legend.position="none") + 
   xlab("Time (ms)") + 
   ylab(expression("Mean amplitude"~(mu*"V"))) + 
   colScale)
 
 # Save plot
-save_plot(filename = "ERP-plots/Grand_average_eriksen.pdf",
-          plot = grand_difference,
-          base_height = 6,
-          base_width = 14)
+# save_plot(filename = "ERP-plots/Grand_average_eriksen.pdf",
+#           plot = grand_difference,
+#           base_height = 10,
+#           base_width = 16)
+
+# # Save participant plot
+# save_plot(
+#   filename = paste("ERP-plots/participant_plots/",
+#                    subject,
+#                    "-Eriksen.pdf",
+#                    sep = ""),
+#   plot = grand_difference,
+#   base_height = 10,
+#   base_width = 16
+# )
