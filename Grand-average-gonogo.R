@@ -100,12 +100,14 @@ for (i in 1:length(csv.files)){
 # Convert to data frame to be more informative 
 trial.n <- data.frame(trial.n)
 
+colnames(trial.n) <- c("subject", "n_go", "n_nogo")
+
 # Append whether the participants are included or not 
 trial.n <- trial.n %>% 
   mutate(included = case_when(n_go & n_nogo > 19 ~ 1,
                               n_go & n_nogo < 20 ~ 0))
 
-colnames(trial.n) <- c("subject", "n_go", "n_nogo", "included")
+
 
 # Read in all processed data to save time 
 amplitude.dat <- read_bulk(directory = "processed_data/gonogo/",
@@ -137,10 +139,14 @@ names(group.cols) <- (levels(difference_wave$electrode))
 
 colScale <- scale_color_manual(name = "Electrode", values = group.cols)
 
+# Subset data for when I want to show individual data
+subject <- 2016
+difference_wave2 <- subset(difference_wave, subject == 2016)
+
 # Create a plot with both go and nogo waves 
 (grand_difference <- difference_wave %>% 
   ggplot(aes(x = time, y = difference)) + 
-  facet_grid(~smoking_group) + 
+  facet_grid(electrode~smoking_group) + 
   # stat_summary(aes(group = interaction(smoking_group, subject), colour = smoking_group),
   #              fun.y = mean,
   #              geom = "line",
@@ -151,17 +157,37 @@ colScale <- scale_color_manual(name = "Electrode", values = group.cols)
                geom = "line",
                size = 1,
                alpha = 1) + 
+  stat_summary(data = difference_wave2, # optional label participant
+               fun.y = mean,
+               geom = "line",
+               color = "black",
+               size = 1,
+               alpha = 1) +
   scale_x_discrete(limits = seq(from = -200, to = 800, by = 200)) +
   geom_hline(yintercept = 0, linetype = 2) + 
   geom_vline(xintercept = 0, linetype = 2) + 
   xlab("Time (ms)") + 
+  annotate("rect", xmin = 175, xmax = 250, ymin = -10, ymax = 15, alpha = 0.3) + #N2
+  annotate("rect", xmin = 300, xmax = 500, ymin = -10, ymax = 15, alpha = 0.3) + #P3
+  theme(legend.position = "none") + 
   ylab(expression("Mean amplitude"~(mu*"V"))) +
   scale_y_continuous(limits = c(-10, 15),
                      breaks = seq(-10, 15, 5)) + 
   colScale)
 
-# Save plot
-save_plot(filename = "ERP-plots/Grand_average_gonogo.pdf",
-          plot = grand_difference,
-          base_height = 6,
-          base_width = 14)
+# # Save plot
+# save_plot(filename = "ERP-plots/Grand_average_gonogo.pdf",
+#           plot = grand_difference,
+#           base_height = 10,
+#           base_width = 16)
+
+# Save participant plot
+save_plot(
+  filename = paste("ERP-plots/participant_plots/",
+                   subject,
+                   "-Go-NoGo.pdf",
+                   sep = ""),
+  plot = grand_difference,
+  base_height = 10,
+  base_width = 16
+)
