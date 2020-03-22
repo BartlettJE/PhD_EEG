@@ -1,0 +1,1211 @@
+---
+title: "Chapter Four Reproducible Results"
+author: ""
+date: ""
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+
+```{r load packages}
+require(tidyverse)
+require(janitor)
+require(afex)
+require(psych)
+require(cowplot)
+require(knitr)
+require(car)
+require(splithalf)
+require(readbulk)
+require(kableExtra)
+```
+
+```{r reporting functions}
+# Take alpha estimate and 95% CI 
+format.alpha <- function(object){
+  # from t test object 
+  alpha <- round(object$boot.ci[2], 2)
+  lower <- round(object$boot.ci[1], 2)
+  upper <- round(object$boot.ci[3], 2)
+  
+  output <- paste("Cronbach’s alpha = ", alpha, ", 95% CI = [", lower, ", ", upper, "]",
+                  sep = "")
+  return(output)
+}
+
+# Take split-half r estimate and 95% CI 
+format.splithalf <- function(object, electrode){
+  object <- subset(object, condition == electrode)
+  r <- round(object[1, 6], 2)
+  lower <- round(object[1, 7], 2)
+  upper <- round(object[1, 8], 2)
+  
+  output <- paste("r = ", r, ", 95% CI = [", lower, ", ", upper, "]",
+                  sep = "")
+  return(output)
+}
+
+# Report Levene's test
+report_levene <- function(object){
+  df1 <- object$Df[1]
+  df2 <- object$Df[2]
+  fval <- round(object$`F value`[1], 2)
+  pval <- round(object$`Pr(>F)`[1], 3)
+  result <- paste("F (", df1, ", ", df2, ") = ", fval, ", p = ", pval, sep = "")
+  return(result)
+}
+
+report_afex_anova <- function(anova_object, effect){
+  df1 <- as.numeric(round(anova_object$anova_table$`num Df`[effect], 2))
+  df2 <- as.numeric(round(anova_object$anova_table$`den Df`[effect], 2))
+  fval <- as.numeric(format(round(anova_object$anova_table$F[effect], digits=2), nsmall = 2)) 
+  effect_size <- as.numeric(round(anova_object$anova_table$ges[effect], 3))
+  # format retains the trailing zeros
+  pval <- as.numeric(round(anova_object$anova_table$`Pr(>F)`[effect], 3))
+  if (pval >= 0.001){
+    pval <-  paste0(", p = ", pval)
+  } else if (pval < 0.001){
+    pval <- ", p < .001"
+  }
+  effect_size <- as.numeric(round(anova_object$anova_table$ges[effect], 3))
+  if (effect_size >= 0.001){
+    effect_size <-  paste0(", ges = ", effect_size)
+  } else if (effect_size < 0.001){
+    pval <- ", ges < .001"
+  }
+  result <- paste0("F (", df1, ", ", df2, ") = ", fval, pval, effect_size)
+  return(result)
+}
+
+report_mean_range <- function(data){
+mean_trials <- round(mean(data), 2)
+sd_trials <- round(sd(data), 2)
+min_trials <- min(data)
+max_trials <- max(data)
+
+return(paste0(mean_trials, " (SD = ", sd_trials, "; range ", min_trials, "-", max_trials, ")"))
+}
+
+mean_sd <- function(data){
+  mean <- round(mean(data, na.rm = T), 2)
+  sd <- round(sd(data, na.rm = T), 2)
+  return(paste0(mean, " (", sd, ")"))
+}
+
+median_IQR <- function(data){
+  med <- round(median(data, na.rm = T), 2)
+  iqr <- round(IQR(data, na.rm = T), 2)
+  return(paste0(med, " (", iqr, ")"))
+}
+
+report_wilcoxon <- function(data, condition_1, condition_2){
+  wilcoxon <- wilcox.test(x = condition_1, y = condition_2, paired = T, exact = F)
+  
+  Zstat<- round(qnorm(wilcoxon$p.value/2), 2)
+  
+  rval <- round(abs(Zstat) / sqrt(nrow(data)), 2)
+  
+  pval <- as.numeric(round(wilcoxon$p.value, 3))
+  if (pval >= 0.001){
+    pval <-  paste0(", p = ", pval)
+  } else if (pval < 0.001){
+    pval <- ", p < .001"
+  }
+  result <- paste0("Z = ", Zstat, pval, ", r = ", rval)
+  return(result)
+}
+
+report_mann_whitney <- function(data, value, group){
+  wilcoxon <- wilcox.test(value ~ group, paired = F, exact = F)
+  
+  Zstat<- round(qnorm(wilcoxon$p.value/2), 2)
+  
+  rval <- round(abs(Zstat) / sqrt(nrow(data)), 2)
+  
+  pval <- as.numeric(round(wilcoxon$p.value, 3))
+  if (pval >= 0.001){
+    pval <-  paste0(", p = ", pval)
+  } else if (pval < 0.001){
+    pval <- ", p < .001"
+  }
+  result <- paste0("Z = ", Zstat, pval, ", r = ", rval)
+  return(result)
+}
+```
+
+```{r plotting options}
+# Consistent colour scale 
+group.cols <- c("#a6cee3", "#1f78b4", "#b2df8a")
+
+names(group.cols) <- (levels(c("Daily Smokers", "Non-daily Smokers", "Non-smokers")))
+
+colScale <- scale_fill_manual(name = "Smoking group", values = group.cols)
+```
+
+# 2. Methods  
+
+## 2.3. Materials
+
+```{r scale reliability, results = "hide"}
+demo <- read_csv("Average_data/demographic_data_all.csv")
+
+demo <- demo %>% 
+  mutate(positive_panas_pre = p1 + p3 + p5 + p9 + p10 + p12 + p14 + p16 + p17 + p19,
+         negative_panas_pre = p2 + p4 + p6 + p7 + p8 + p11 + p13 + p15 + p18 + p20,
+         QSU_1_pre = q1 + q3 + q6 + q7 + q10,
+         QSU_2_pre = q2 + q4 + q5 + q8 + q9)
+
+
+# PANAS 
+positive_panas <- c("p1", "p3", "p5", "p9", "p10", "p12", "p14", "p16", "p17", "p19")
+negative_panas <- c("p2", "p4", "p6", "p7", "p8", "p11", "p13", "p15", "p18", "p20")
+
+iters <- 1e4 
+
+set.seed(17112019)
+
+pp_alpha <- demo[positive_panas]
+
+pp_reliability <- alpha(pp_alpha, n.iter = iters)
+
+np_alpha <- demo[negative_panas]
+
+np_reliability <- alpha(np_alpha, n.iter = iters)
+
+# QSU 
+QSU_1 <- c("q1", "q3", "q6", "q7", "q10")
+QSU_2 <- c("q2", "q4", "q5", "q8", "q9")
+
+smokers <- demo %>% filter(smoking_group == "Smokers")
+
+qsu1_alpha <- smokers[QSU_1]
+
+set.seed(17112019)
+
+qsu_1_reliability <- alpha(qsu1_alpha, n.iter = iters)
+
+qsu2_alpha <- smokers[QSU_2]
+
+qsu_2_reliability <- alpha(qsu2_alpha, n.iter = iters)
+
+# FTCD 
+smoking_scales <- read_csv("Average_data/FTCD_WISDM_clean.csv")
+
+smoking_scales <- smoking_scales %>% 
+  mutate(aff_attachment = (w20 + w36 + w43 + w48 + w67) / 5,
+         automaticity = (w5 + w19 + w26 + w41 + w55) / 5,
+         loss_control = (w6 + w28 + w34 + w62) / 4,
+         behav_choice = (w10 + w21 + w35 + w38 + w46 + w49 + w68) / 7,
+         cog_enhancement = (w13 + w15 + w24 + w39 + w57) / 5,
+         craving = (w11 + w29 + w37 + w50) / 4,
+         cue_expos = (w4 + w17 + w23 + w40 + w42 + w51 + w59) / 7,
+         neg_rein = (w7 + w18 + w25 + w32 + w58 + w65) / 6,
+         pos_rein = (w3 + w8 + w45 + w60 + w64) / 5,
+         social_goads = (w22 + w30 + w44 + w52) / 4,
+         sensory_process = (w1 + w12 + w27 + w33 + w53 + w66) / 6,
+         tolerance = (w9 + w14 + w47 + w54 + w63) / 5,
+         weight_control = (w2 + w16 + w31 + w56 + w61) / 5,
+         total_WISDM = aff_attachment + automaticity + loss_control + behav_choice + cog_enhancement + craving + cue_expos + neg_rein + pos_rein + social_goads + sensory_process + tolerance + weight_control,
+         FTCD_total = ftnd_1 + ftnd_2 + ftnd_3 + ftnd_4 + ftnd_5 + ftnd_6)
+
+set.seed(07122019)
+
+# FTCD_reliability <- alpha(smoking_scales[2:7], n.iter = iters, na.rm = T)
+
+# WISDM table 
+
+wisdm_alpha <- read_csv("Average_data/WISDM-subscales-alpha.csv")
+
+wisdm_alpha <- round(wisdm_alpha, 2)
+
+colnames(wisdm_alpha) <- c("Lower CI", "Alpha", "Upper CI")
+
+rownames(wisdm_alpha) <- c("Affiliative Attachment", "Automaticity", 
+                           "Loss of Control", "Behavioural Choice", 
+                           "Cognitive Enhancement", "Craving", 
+                           "Cue Exposure", "Negative Reinforcement", 
+                           "Positive Reinforcement", "Social Goads", 
+                           "Sensory Processes", 
+                           "Tolerance", "Weight Control")
+```
+
+Participants completed the same questionnaires as in study one. The estimates for the internal consistency of each sub-scale of the WISDM-68 in this sample is reported in Table 4.1. The internal consistency estimate of the FTCD was marginally higher than in study one (Cronbach’s alpha = 0.51, 95% CI = [-0.33, 0.78]), but there are large confidence intervals due to the small number of smokers in the sample. There was a similar pattern of internal consistency estimates for PANAS in the positive (`r format.alpha(pp_reliability)`) and negative affect sub-scales (`r format.alpha(np_reliability)`). The internal consistency of the QSU was similar to study one with a higher estimate for factor 1 (`r format.alpha(qsu_1_reliability)`) than factor 2 (`r format.alpha(qsu_2_reliability)`).
+
+```{r wisdm68 alpha table}
+kable(x = wisdm_alpha, format = "html", caption = "Table 4.1. Internal consistency estimates using Cronbach’s alpha for each subscale of the WISDM-68.", align = "c")
+
+```
+
+# 3. Results
+
+## 3.1. Data screening 
+
+Due to a lack of resources slowing data collection and eventually running out of time, only 21 non-smokers and 12 smokers completed the study. For smokers, this was lower than the minimum number of participants identified in the pre-registration protocol. The plan was to include 18 daily and 18 non-daily smokers per group before performing an interim analysis. This means smokers cannot be split up into sub-groups, and the analyses should be considered exploratory. Differences within smokers will be explored, but the findings should be interpreted tentatively.  
+
+### *3.1.1. Inhibitory control* 
+
+```{r gonogo eligible trials}
+gonogo_trials <- read_csv("Average_data/gonogo_trial_numbers.csv")
+
+gonogo_trials <- subset(gonogo_trials, included == 1)
+```
+
+
+The minimum number of trials in the Go and NoGo conditions had to be 20 in order to be internally consistent based on previous research (e.g., Rietdijk et al. 2014). Five non-smokers and two smokers had fewer than 20 trials in one or more conditions, and were not included in the analysis. This left 10 smokers and 16 non-smokers. The mean number of Go trials was `r report_mean_range(gonogo_trials$n_go)` and the mean number of NoGo trials was `r report_mean_range(gonogo_trials$n_nogo)`.  
+
+### *3.1.2. Error processing* 
+
+```{r eriksen eligible trials}
+eriksen_trials <- read_csv("Average_data/eriksen_trial_numbers.csv")
+
+eriksen_trials <- subset(eriksen_trials, included == 1)
+```
+
+The minimum number of trials in the correct and incorrect conditions had to be 8 in order to be internally consistent based on previous research (e.g., Rietdijk et al. 2014). Three non-smokers and two smokers had fewer than 8 trials in one or more conditions, and were not included in the analysis. This left 10 smokers and 18 non-smokers. The mean number of correct trials was `r report_mean_range(eriksen_trials$n_correct)` and the mean number of incorrect trials was `r report_mean_range(eriksen_trials$n_incorrect)`.  
+
+## 3.2. Demographics
+
+```{r ethnicity}
+ethnicity <- demo %>% 
+  count(ethnicity, sort = T) %>% 
+  mutate(perc = (round(n / nrow(demo) * 100, 2)))
+```
+
+The demographics cover the 19 non-smokers and 10 smokers that were included in at least one task. The key demographic information for each smoking group is presented in Table 4.2. Across the whole sample, participants were predominantly white, with the two largest groups identifying themselves as white British (`r ethnicity[1, 3]`%: `r ethnicity[1, 2]`) or white European (`r ethnicity[2, 3]`%: `r ethnicity[2, 2]`). There were smaller proportions of black British (`r ethnicity[3, 3]`%: `r ethnicity[3, 2]`), Asian (`r ethnicity[4, 3]`%: `r ethnicity[4, 2]`), Chinese (`r ethnicity[5, 3]`%: `r ethnicity[5, 2]`), British Asian (`r ethnicity[6, 3]`%: `r ethnicity[6, 2]`), Greek (`r ethnicity[7, 3]`%: `r ethnicity[7, 2]`), and Hispanic (`r ethnicity[8, 3]`%: `r ethnicity[8, 2]`). Figure 4.1 shows the key smoking variables. Despite the small sample sizes, there is a clear distinction between daily and non-daily smokers.   
+
+```{r set up table}
+# Add three smoking groups 
+demo <- demo %>% mutate(smoking_category = case_when(smoking_frequency == "Every day" ~ "Daily Smokers",
+                                          smoking_frequency == "Some days" ~ "Non-daily Smokers",
+                                          smoking_group == "Non-smokers" ~ "Non-smokers"))
+
+post_panas_ns <- read_csv("Average_data/post_PANAS_nonsmokers.csv")
+
+post_panas_ns <- post_panas_ns %>% 
+  mutate(positive_panas_post = p1 + p3 + p5 + p9 + p10 + p12 + p14 + p16 + p17 + p19,
+         negative_panas_post = p2 + p4 + p6 + p7 + p8 + p11 + p13 + p15 + p18 + p20)
+
+### Post QSU PANAS smokers 
+post_smokers <- read_csv("Average_data/post_QSU_PANAS_smokers.csv")
+
+post_smokers <- post_smokers%>% 
+  mutate(positive_panas_post = p1 + p3 + p5 + p9 + p10 + p12 + p14 + p16 + p17 + p19,
+         negative_panas_post = p2 + p4 + p6 + p7 + p8 + p11 + p13 + p15 + p18 + p20,
+         QSU_1_post = q1 + q3 + q6 + q7 + q10,
+         QSU_2_post = q2 + q4 + q5 + q8 + q9)
+
+smoking_groups <- demo %>% 
+  filter(smoking_group == "Smokers") %>% 
+  select(participant, smoking_category)
+
+post_smokers <- left_join(post_smokers, smoking_groups)
+
+# WISDM and FTCD
+smoking_scales <- left_join(smoking_scales, smoking_groups)
+```
+
+```{r create table}
+# Table 
+ds <- subset(demo, smoking_category == "Daily Smokers")
+nds <- subset(demo, smoking_category == "Non-daily Smokers")
+ns <- subset(demo, smoking_group == "Non-smokers")
+
+ds_post <- subset(post_smokers, smoking_category == "Daily Smokers")
+nds_post <- subset(post_smokers, smoking_category == "Non-daily Smokers")
+
+ds_scales <- subset(smoking_scales, smoking_category == "Daily Smokers")
+nds_scales <- subset(smoking_scales, smoking_category == "Non-daily Smokers")
+```
+
+```{r create values}
+# Create table to shorten 
+
+# Age
+nds_age <- mean_sd(nds$age)
+ds_age <- mean_sd(ds$age)
+ns_age <- mean_sd(ns$age)
+
+# CO
+nds_co <- mean_sd(nds$carbon_monoxide)
+ds_co <- mean_sd(ds$carbon_monoxide)
+
+# Gender 
+nds_gender <- nds %>% count(gender)
+ds_gender <- ds %>% count(gender)
+ns_gender <- ns %>% count(gender)
+
+nds_gender <- paste0(nds_gender[1,2], ":", nds_gender[2,2])
+ds_gender <- paste0(ds_gender[1,2], ":", ds_gender[2,2])
+ns_gender <- paste0(ns_gender[1,2], ":", ns_gender[2,2])
+
+# PANAS 
+#   positive pre 
+nds_panas_pos_pre <- mean_sd(nds$positive_panas_pre)
+ds_panas_pos_pre <- mean_sd(ds$positive_panas_pre)
+ns_panas_pos_pre <- mean_sd(ns$positive_panas_pre)
+
+#   positive post
+nds_panas_pos_post <- mean_sd(nds_post$positive_panas_post)
+ds_panas_pos_post <- mean_sd(ds_post$positive_panas_post)
+ns_panas_pos_post <- mean_sd(post_panas_ns$positive_panas_post)
+
+#   negative pre 
+nds_panas_neg_pre <- mean_sd(nds$negative_panas_pre)
+ds_panas_neg_pre <- mean_sd(ds$negative_panas_pre)
+ns_panas_neg_pre <- mean_sd(ns$negative_panas_pre)
+
+#   negative post
+nds_panas_neg_post <- mean_sd(nds_post$negative_panas_post)
+ds_panas_neg_post <- mean_sd(ds_post$negative_panas_post)
+ns_panas_neg_post <- mean_sd(post_panas_ns$negative_panas_post)
+
+# FTCD 
+nds_ftcd <- mean_sd(nds_scales$FTCD_total)
+ds_ftcd <- mean_sd(ds_scales$FTCD_total)
+
+# CPD 
+nds_cpd <- mean_sd(nds$cigarettes_per_day)
+ds_cpd <- mean_sd(ds$cigarettes_per_day)
+
+# WISDM
+nds_wisdm <- mean_sd(nds_scales$total_WISDM)
+ds_wisdm <- mean_sd(ds_scales$total_WISDM)
+
+# Last cigarette
+nds_lastcig <- median_IQR(nds$last_cigarette_mins)
+ds_lastcig <- median_IQR(ds$last_cigarette_mins)
+
+# Years as a smoker 
+nds_years <- mean_sd(nds$years_smoker)
+ds_years <- mean_sd(ds$years_smoker)
+
+# QSU 
+#   F1 pre 
+nds_qsu_f1_pre <- mean_sd(nds$QSU_1_pre)
+ds_qsu_f1_pre <- mean_sd(ds$QSU_1_pre)
+
+#   F1 post
+nds_qsu_f1_post <- mean_sd(nds_post$QSU_1_post)
+ds_qsu_f1_post <- mean_sd(ds_post$QSU_1_post)
+
+#   F2 post
+nds_qsu_f2_pre <- mean_sd(nds$QSU_2_pre)
+ds_qsu_f2_pre <- mean_sd(ds$QSU_2_pre)
+
+#   F2 post
+nds_qsu_f2_post <- mean_sd(nds_post$QSU_2_post)
+ds_qsu_f2_post <- mean_sd(ds_post$QSU_2_post)
+```
+
+```{r make table}
+demo_data <- tribble(~variable, ~nondaily, ~daily, ~nonsmokers,
+                     "Age", nds_age, ds_age, ns_age,
+                     "CO (ppm)", nds_co, ds_co, "-",
+                     "Gender (f:m)", nds_gender, ds_gender, ns_gender,
+                     "PANAS positive pre", nds_panas_pos_pre, ds_panas_pos_pre, ns_panas_pos_pre,
+                     "PANAS positive post", nds_panas_pos_post, ds_panas_pos_post, nds_panas_pos_post,
+                     "PANAS negative pre", nds_panas_neg_pre, ds_panas_neg_pre, ns_panas_neg_pre,
+                     "PANAS negative post", nds_panas_neg_post, ds_panas_neg_post, ns_panas_neg_post,
+                     "FTCD", nds_ftcd, ds_ftcd, "-",
+                     "CPD", nds_cpd, ds_cpd, "-",
+                     "WISDM total", nds_wisdm, ds_wisdm, "-",
+                     "Last cigarette (mins)", nds_lastcig, ds_lastcig, "-",
+                     "Years as a smoker", nds_years, ds_years, "-",
+                     "QSU-B F1 pre", nds_qsu_f1_pre, ds_qsu_f1_pre, "-",
+                     "QSU-B F1 post", nds_qsu_f1_post, ds_qsu_f1_post, "-",
+                     "QSU-B F2 pre", nds_qsu_f2_pre, ds_qsu_f2_pre, "-",
+                     "QSU-B F2 post", nds_qsu_f2_post, ds_qsu_f2_post, "-")
+
+kable(x = demo_data, 
+      format = "html", 
+      caption = "Table 4.2. Mean (SD) values for participant characteristics and scale scores.",
+      align = "c", 
+      col.names = c("","Non-daily (n = 4)", "Daily (n = 6)", "Non-smokers (n = 19)")) %>%
+  footnote(number = c("The CO data from one daily and one non-daily smoker was not available", "Last cigarette data shows median and IQR due to large skew in non-daily smokers"))
+```
+
+
+```{r smoking raincloud plot}
+# CPD 
+source("Plots/raincloud_plot.R")
+
+smokers <- left_join(smokers, smoking_groups)
+
+CPD.plot <- smokers %>% 
+  ggplot(aes(x = smoking_category, y = cigarettes_per_day, fill = smoking_category)) + 
+  geom_flat_violin(position = position_nudge(x = .2, y = 0),adjust =2) +
+  geom_boxplot(aes(x = smoking_category, y = cigarettes_per_day),
+               outlier.shape = NA, alpha = 0.6, width = .1, colour = "BLACK") + 
+  geom_point(position = position_jitter(width = .15), size = 1) + 
+  xlab("Smoking group") + 
+  scale_x_discrete(labels=c("Daily", "Non-daily")) + 
+  ylab("Cigarettes per day") + 
+  scale_fill_manual(values = c("#1f78b4", "#a6cee3")) + 
+  scale_y_continuous(breaks = seq(0, 20, 5),
+                     limits = c(0, 20)) +
+  coord_flip() + 
+  guides(fill = FALSE) +
+  guides(color = FALSE) + 
+  theme_cowplot()
+
+CO.plot <- smokers %>% 
+  ggplot(aes(x = smoking_category, y = carbon_monoxide, fill = smoking_category)) + 
+  geom_flat_violin(position = position_nudge(x = .2, y = 0),adjust =2) +
+  geom_boxplot(aes(x = smoking_category, y = carbon_monoxide),
+               outlier.shape = NA, alpha = 0.6, width = .1, colour = "BLACK") + 
+  geom_point(position = position_jitter(width = .15), size = 1) + 
+  xlab("Smoking group") + 
+  scale_x_discrete(labels=c("Daily", "Non-daily")) + 
+  ylab("Carbon Monoxide (ppm)") + 
+  scale_fill_manual(values = c("#1f78b4", "#a6cee3")) + 
+  coord_flip() + 
+  guides(fill = FALSE) +
+  guides(color = FALSE) + 
+  theme_cowplot()
+
+# FTCD
+WISDM.plot <- smoking_scales %>% 
+  ggplot(aes(x = smoking_category, y = total_WISDM, fill = smoking_category)) + 
+  geom_flat_violin(position = position_nudge(x = .2, y = 0),adjust =2) +
+  geom_boxplot(aes(x = smoking_category, y = total_WISDM),
+               outlier.shape = NA, alpha = 0.6, width = .1, colour = "BLACK") + 
+  geom_point(position = position_jitter(width = .15), size = 1) + 
+  xlab("Smoking group") + 
+  scale_x_discrete(labels=c("Non-daily", "Daily")) + 
+  ylab("Total WISDM score") + 
+  scale_fill_manual(values = c("#1f78b4", "#a6cee3")) + 
+  scale_y_continuous(breaks = seq(10, 70, 10),
+                     limits = c(10, 70)) +
+  coord_flip() + 
+  guides(fill = FALSE) +
+  guides(color = FALSE) + 
+  theme_cowplot()
+
+# Plot grid
+(smoking_plot <- plot_grid(CPD.plot, WISDM.plot, CO.plot,
+          ncol = 2, nrow = 2, labels = c("A", "B", "C"))
+)
+
+
+save_plot(plot = smoking_plot,
+          filename = "Plots/Smoking_variables.pdf",
+          base_height = 10, 
+          base_width = 12)
+```
+
+## 3.3. Inhibitory control 
+
+### *3.3.1 Behavioural data*
+
+```{r gonogo data set up}
+
+trial.n <- read_csv("Average_data/gonogo_trial_numbers.csv")
+
+amplitude.dat <- read_bulk(directory = "processed_data/gonogo/",
+                           extension = ".csv")
+
+# Append whether they are included or not 
+amplitude.dat <- left_join(amplitude.dat, trial.n)
+
+# Add smoking group 
+smoking_data <- demo %>% select(participant, smoking_category)
+
+amplitude.dat <- left_join(amplitude.dat, smoking_data, by = c("subject" = "participant")) %>% 
+  filter(included == 1)
+
+# Create difference wave: nogo - go trials 
+difference_wave <- amplitude.dat %>% 
+  select(-X) %>% 
+  spread(key = condition, value = amplitude) %>% 
+  mutate(difference =  NoGo - Go)
+
+# Behavioural analysis gonogo
+behav.dat <- read_bulk(directory = "Raw_data/Behavioural/Go-NoGo/",
+                       extension = ".csv")
+
+behav.dat <- behav.dat %>% 
+  select(Block, subject_nr, correct, Stim_type, response_time, response) %>%
+  mutate(correct = case_when(Stim_type == "Go" & response == "x" ~ 1,
+                             Stim_type == "NoGo" & response == "None" ~ 1,
+                             Stim_type == "Go" & response == "None" ~ 0,
+                             Stim_type == "NoGo" & response == "x" ~ 0)) %>% 
+  filter(Block != "Practice" & correct == 1 & subject_nr %in% demo$participant)
+
+perc_error <- behav.dat %>% 
+  group_by(subject_nr, Stim_type) %>% 
+  summarise(sum_error = sum(correct)) %>%   
+  mutate(condition_n = case_when(Stim_type == "Go" ~ 320,
+                                 Stim_type == "NoGo" ~ 80)) %>%
+  mutate(perc_error = 100 - (sum_error / condition_n) * 100)
+
+perc_error <- left_join(perc_error, smoking_data, by = c("subject_nr" = "participant"))
+
+error_ANOVA <- aov_ez(id = "subject_nr",
+                      data = perc_error, 
+                      dv = "perc_error",
+                      between = "smoking_category",
+                      within = "Stim_type")
+
+error_descriptives <- perc_error %>% 
+  group_by(Stim_type) %>% 
+  summarise(mean_error = round(mean(perc_error), 2),
+            sd_error = round(sd(perc_error), 2))
+
+# Non-parametric tests 
+error <- perc_error %>% select(Stim_type, perc_error) %>% 
+  spread(key = Stim_type, value = perc_error)
+
+```
+
+The behavioural analyses were not outlined in the pre-registration protocol as previous research had not consistently established any effects. Therefore, the behavioural data is reported should be considered exploratory. For the Go/NoGo task, the DV was the percentage error where participants provided the incorrect response. A 2 x 2 mixed ANOVA was performed with one between-subject factor of smoking group (smoker vs non-smoker) and one within-subject factor of trial type (Go vs NoGo).
+
+There was not a significant effect of smoking group (`r report_afex_anova(error_ANOVA, 1)`), but there was a significant main effect of congruency (`r report_afex_anova(error_ANOVA, 2)`). Participants had greater percentage error on NoGo trials (M = `r error_descriptives[2,2]`%, SD = `r error_descriptives[2,3]`%) than Go trials (M = `r error_descriptives[1,2]`%, SD = `r error_descriptives[1,3]`%). Due to potential issues with normality, this effect was followed up with a non-parametric equivalent. A Wilcoxon paired samples test showed complimentary results, with higher percentage error on NoGo trials than Go trials, `r report_wilcoxon(error, error$Go, error$NoGo)`. There was not a significant interaction between smoking group and congruency, `r report_afex_anova(error_ANOVA, 3)`. The results for the behavioural data are shown graphically in Figure 4.2. 
+
+```{r gonogo behavioural plot}
+
+(gonogo_error_plot <- afex_plot(error_ANOVA, 
+          x = "smoking_category", 
+          trace = "Stim_type", 
+          error_ci = T,
+          legend_title = "Stimulus Type",
+          point_arg = list(size = 3),
+          error_arg = list(size = 1, width = 0.1),
+          line_arg = list(size = 0.5),
+          data_arg = list(size = 2),
+          mapping = c("color", "shape", "fill")) + 
+  xlab("Smoking Group") + 
+  ylab("Percentage Error (%)") + 
+  scale_color_manual(values = c("#a6cee3", "#b2df8a")) + 
+  theme_cowplot()
+)
+
+save_plot(plot = gonogo_error_plot,
+          filename = "Plots/GoNoGo_behavioural_plot.pdf",
+          base_height = 7.5, 
+          base_width = 9)
+
+```
+
+### *3.3.2. ERP components* 
+
+```{r gonogo erp analysis}
+### Inferential stats
+
+# Baseline for SNR
+gonogo_baseline <- difference_wave %>% 
+  group_by(subject, smoking_category, electrode) %>% 
+  filter(time >= -200 & time <= 0) %>% 
+  summarise(mean_baseline = mean(difference)) %>% 
+  select(subject, electrode, mean_baseline)
+
+# N2 analysis
+N2 <- difference_wave %>% 
+  group_by(subject, smoking_category, electrode) %>% 
+  filter(time >= 175 & time <= 250) %>% 
+  summarise(mean_amp = mean(difference))
+
+# Double check this 
+# Square root of power / square root of baseline noise 
+N2_SNR <- left_join(N2, gonogo_baseline) %>% 
+  mutate(SNR = round(sqrt(mean_amp^2) / sqrt(mean_baseline^2), 3)) # squared to get rid of negatives 
+
+N2_ANOVA <- aov_ez(id = "subject",
+                    data = N2, 
+                    dv = "mean_amp",
+                    between = "smoking_category",
+                    within = "electrode")
+
+# P3 analysis 
+P3 <- difference_wave %>% 
+  group_by(subject, smoking_category, electrode) %>% 
+  filter(time >= 300 & time <= 500) %>% 
+  summarise(mean_amp = mean(difference))
+
+P3_ANOVA <- aov_ez(id = "subject",
+                   data = P3, 
+                   dv = "mean_amp",
+                   between = "smoking_category",
+                   within = "electrode")
+
+# Descriptives 
+# N2
+N2_descriptives <- difference_wave %>% 
+  group_by(smoking_category, electrode) %>% 
+  filter(time >= 175 & time <= 250) %>% 
+  summarise(mean_Go = mean(Go),
+            sd_Go = sd(Go),
+            mean_NoGo = mean(NoGo),
+            sd_NoGo = sd(NoGo))
+
+# P3
+P3_descriptives <- difference_wave %>% 
+  group_by(smoking_category, electrode) %>% 
+  filter(time >= 300 & time <= 500) %>% 
+  summarise(mean_Go = mean(Go),
+            sd_Go = sd(Go),
+            mean_NoGo = mean(NoGo),
+            sd_NoGo = sd(NoGo))
+```
+
+Table 4.3 shows the mean voltage in the time windows of each ERP component across electrode and smoking groups. For the purposes of the analyses, the DV was the difference in mean amplitude (NoGo - Go) with higher positive values indicating relatively greater NoGo activity. Figure 4.2 shows the time-locked waveforms for each smoking group split by electrode. A 2 x 3 mixed ANOVA was performed with one between-subjects IV of smoking group (smokers vs non-smokers) and one within-subjects IV of electrode (Cz vs Fz vs Pz). This is highlighted as a deviation from the pre-registration protocol as the original plan was to use a 3 x 3 x 2 mixed ANOVA with smokers split into daily and non-daily smokers, and an additional factor of condition (Go vs NoGo). However, given the smaller sample size, removing one factor prevents further reducing the degrees of freedom and reduces the increased type I error rate associated with a larger number of factors in ANOVA (Cramer et al. 2016; Luck and Gaspelin 2017). The degrees of freedom for the main effect of electrode and the interaction effect was corrected using the Greenhouse-Geisser correction. 
+
+```{r mean ampltitude table gonogo}
+N2_go <- difference_wave %>% 
+  group_by(smoking_category, electrode) %>% 
+  filter(time >= 175 & time <= 250) %>% 
+  summarise(mean_go = round(mean(Go), 2),
+            sd_go = round(sd(Go), 2)) %>% 
+  mutate(value = paste0(mean_go, " (", sd_go, ")")) %>% 
+  select(-mean_go, -sd_go) %>% 
+  spread(key = smoking_category, value = value) %>% 
+  mutate(condition = "Go N2")
+
+N2_nogo <- difference_wave %>% 
+  group_by(smoking_category, electrode) %>% 
+  filter(time >= 175 & time <= 250) %>% 
+  summarise(mean_nogo = round(mean(NoGo), 2),
+            sd_nogo = round(sd(NoGo), 2)) %>% 
+  mutate(value = paste0(mean_nogo, " (", sd_nogo, ")")) %>% 
+  select(-mean_nogo, -sd_nogo) %>% 
+  spread(key = smoking_category, value = value) %>% 
+  mutate(condition = "NoGo N2")
+
+P3_go <- difference_wave %>% 
+  group_by(smoking_category, electrode) %>% 
+  filter(time >= 300 & time <= 500) %>% 
+  summarise(mean_go = round(mean(Go), 2),
+            sd_go = round(sd(Go), 2)) %>% 
+  mutate(value = paste0(mean_go, " (", sd_go, ")")) %>% 
+  select(-mean_go, -sd_go) %>% 
+  spread(key = smoking_category, value = value) %>% 
+  mutate(condition = "Go P3")
+
+P3_nogo <- difference_wave %>% 
+  group_by(smoking_category, electrode) %>% 
+  filter(time >= 300 & time <= 500) %>% 
+  summarise(mean_nogo = round(mean(NoGo), 2),
+            sd_nogo = round(sd(NoGo), 2)) %>% 
+  mutate(value = paste0(mean_nogo, " (", sd_nogo, ")")) %>% 
+  select(-mean_nogo, -sd_nogo) %>% 
+  spread(key = smoking_category, value = value) %>% 
+  mutate(condition = "NoGo P3")
+
+gonogo_desc <- bind_rows(N2_go, N2_nogo, P3_go, P3_nogo) %>% 
+  select(condition, electrode, "Non-daily Smokers", 'Daily Smokers', "Non-smokers")
+
+tidy_rows = c(2, 3, 5, 6, 8, 9, 11, 12)
+
+gonogo_desc[tidy_rows, 1] <- ""
+
+kable(x = gonogo_desc, 
+      format = "html", 
+      caption = "Table 4.2", 
+      align = "c",
+      digits = 2, 
+      col.names = c("Condition", "Electrode", "Non-daily Smokers", "Daily Smokers", "Non-smokers")) 
+
+```
+
+
+```{r ERP_plot_gonogo}
+# Create constant colour scheme for all plots 
+difference_wave$electrode <- factor(difference_wave$electrode, 
+                                        levels = c("Cz", "Fz", "Pz"),
+                                        labels = c("Cz", "Fz", "Pz"))
+
+group.cols <- c("#a6cee3", "#1f78b4", "#b2df8a")
+
+names(group.cols) <- (levels(difference_wave$electrode))
+
+colScale <- scale_color_manual(name = "Electrode", values = group.cols)
+
+# # Subset data for when I want to show individual data
+# subject <- 2016
+# difference_wave2 <- subset(difference_wave, subject == 2016)
+
+# Create a plot with both go and nogo waves 
+(grand_difference <- difference_wave %>% 
+  ggplot(aes(x = time, y = difference)) + 
+  facet_grid(electrode~smoking_category) + 
+  # stat_summary(aes(group = interaction(smoking_group, subject), colour = smoking_group),
+  #              fun.y = mean,
+  #              geom = "line",
+  #              size = 1,
+  #              alpha = 0.2) + 
+  stat_summary(aes(group = interaction(smoking_category, electrode), colour = electrode),
+               fun.y = mean,
+               geom = "line",
+               size = 1,
+               alpha = 1) + 
+  # stat_summary(data = difference_wave2, # optional label participant
+  #              fun.y = mean,
+  #              geom = "line",
+  #              color = "black",
+  #              size = 1,
+  #              alpha = 1) +
+  scale_x_discrete(limits = seq(from = -200, to = 800, by = 200)) +
+  geom_hline(yintercept = 0, linetype = 2) + 
+  geom_vline(xintercept = 0, linetype = 2) + 
+  xlab("Time (ms)") + 
+  annotate("rect", xmin = 175, xmax = 250, ymin = -10, ymax = 15, alpha = 0.3) + #N2
+  annotate("rect", xmin = 300, xmax = 500, ymin = -10, ymax = 15, alpha = 0.3) + #P3
+  ylab(expression("Mean amplitude"~(mu*"V"))) +
+  scale_y_continuous(limits = c(-10, 15),
+                     breaks = seq(-10, 15, 5)) + 
+  colScale + 
+  theme_cowplot()+
+  theme(legend.position = "none",
+        panel.spacing.x = unit(10, "mm"))) 
+
+save_plot(plot = grand_difference,
+          filename = "Plots/GoNoGo_grand-waveform.pdf",
+          base_height = 10, 
+          base_width = 15)
+```
+
+For the N2 time window, there was not a significant main effect of smoking group (`r report_afex_anova(N2_ANOVA, 1)`) or electrode (`r report_afex_anova(N2_ANOVA, 2)`). There was also no interaction between smoking group and electrode (`r report_afex_anova(N2_ANOVA, 3)`). For the P3 time window, there was no main effect of smoking group (`r report_afex_anova(P3_ANOVA, 1)`), but there was a significant effect of electrode (`r report_afex_anova(P3_ANOVA, 2)`). The pairwise comparisons were not followed up as a main effect of electrode was not of interest. There was no significant interaction between smoking group and electrode (`r report_afex_anova(P3_ANOVA, 3)`). The mean amplitude per smoking group and electrode is displayed in Figure 4.3.    
+
+```{r ERP_interaction_plot}
+N2_mean <- afex_plot(N2_ANOVA, 
+          x = "smoking_category", 
+          trace = "electrode",
+          legend_title = "Electrode",
+          point_arg = list(size = 3),
+          error_arg = list(size = 0.5, width = 0.1),
+          line_arg = list(size = 0.5),
+          data_arg = list(size = 2),
+          mapping = c("color", "shape", "fill")) + 
+  xlab("Smoking Group") + 
+  ylab(expression("Mean amplitude"~(mu*"V"))) + 
+  scale_y_continuous(limits = c(-5, 5),
+                     breaks = seq(-5, 5, 1)) + 
+  scale_color_manual(values = c("#a6cee3", "#1f78b4", "#b2df8a")) + 
+  geom_hline(yintercept = 0, linetype = 2) + 
+  theme_cowplot()
+
+P3_mean <- afex_plot(P3_ANOVA, 
+          x = "smoking_category", 
+          trace = "electrode",
+                    legend_title = "Electrode",
+          point_arg = list(size = 3),
+          error_arg = list(size = 0.5, width = 0.1),
+          line_arg = list(size = 0.5),
+          data_arg = list(size = 2),
+          mapping = c("color", "shape", "fill")) + 
+  xlab("Smoking Group") + 
+  ylab(expression("Mean amplitude"~(mu*"V"))) + 
+  scale_y_continuous(limits = c(-3, 8),
+                     breaks = seq(-3, 8, 1)) + 
+  scale_color_manual(values = c("#a6cee3", "#1f78b4", "#b2df8a")) + 
+  geom_hline(yintercept = 0, linetype = 2) + 
+  theme_cowplot()
+
+(gonogo_means <- plot_grid(N2_mean, P3_mean,
+          nrow = 2,
+          ncol = 1, 
+          labels = c("(a) N2", " (b) P3"),
+          label_x = 0.1)
+)
+
+save_plot(plot = gonogo_means,
+          filename = "Plots/GoNoGo_mean_amplitudes.pdf",
+          base_height = 10, 
+          base_width = 8)
+```
+
+## 3.4. Error processing
+
+### *3.4.1. Behavioural data*
+
+```{r eriksen data setup}
+
+# Read in processed data from file 
+amplitude.dat <- read_bulk(directory = "processed_data/eriksen/",
+                           extension = ".csv")
+
+# append eligible or not 
+# Number trials included 
+trial.n <- read_csv("Average_data/eriksen_trial_numbers.csv")
+
+amplitude.dat <- left_join(amplitude.dat, trial.n,
+            by = c("subject" = "participant")) 
+
+  # Add smoking group 
+amplitude.dat <- left_join(amplitude.dat, smoking_data, by = c("subject" = "participant")) %>% 
+  filter(included == 1)
+
+# Create difference wave: incorrect - correct trials 
+difference_wave <- amplitude.dat %>% 
+  select(-X) %>% 
+  spread(key = response, value = amplitude) %>% 
+  mutate(difference = incorrect - correct)
+
+### Inferential stats
+
+# ERN analysis
+ERN <- difference_wave %>% 
+  group_by(subject, smoking_category, electrode) %>% 
+  filter(time >= 25 & time <= 75) %>% 
+  summarise(mean_amp = mean(difference))
+
+ERN_ANOVA <- aov_ez(id = "subject",
+       data = ERN, 
+       dv = "mean_amp",
+       between = "smoking_category",
+       within = "electrode")
+
+# Pe analysis 
+Pe <- difference_wave %>% 
+  group_by(subject, smoking_category, electrode) %>% 
+  filter(time >= 200 & time <= 400) %>% 
+  summarise(mean_amp = mean(difference))
+
+Pe_ANOVA <- aov_ez(id = "subject",
+                    data = Pe, 
+                    dv = "mean_amp",
+                    between = "smoking_category",
+                    within = "electrode")
+
+# Descriptives 
+# ERN 
+ERN_descriptives <- difference_wave %>% 
+  group_by(smoking_category, electrode) %>% 
+  filter(time >= 25 & time <= 75) %>% 
+  summarise(mean_correct = mean(correct),
+            sd_correct = sd(correct),
+            mean_incorrect = mean(incorrect),
+            sd_incorrect = sd(incorrect))
+
+# Pe 
+Pe_descriptives <- difference_wave %>% 
+  group_by(smoking_category, electrode) %>% 
+  filter(time >= 200 & time <= 400) %>% 
+  summarise(mean_correct = mean(correct),
+            sd_correct = sd(correct),
+            mean_incorrect = mean(incorrect),
+            sd_incorrect = sd(incorrect))
+
+# Behavioural analysis 
+behav.dat <- read_bulk(directory = "Raw_data/Behavioural/Eriksen/",
+                           extension = ".csv")
+
+behav.dat <- behav.dat %>% 
+  filter(Block != "Practice" & correct == 1 & response_time >= 200 & subject_nr %in% difference_wave$subject) %>% 
+  group_by(subject_nr, Congruency) %>% 
+  mutate(median_rt = median(response_time),
+         MAD_threshold = stats::mad(response_time)*2.5) %>% 
+  filter(response_time > (median_rt - MAD_threshold) & response_time < (median_rt + MAD_threshold))
+
+perc_error <- behav.dat %>% 
+  group_by(subject_nr, Congruency) %>% 
+  summarise(perc_error = 100 - (sum(correct) / 200) * 100) 
+
+perc_error <- left_join(perc_error, smoking_data, by = c("subject_nr" = "participant"))
+  
+error_ANOVA <- aov_ez(id = "subject_nr",
+       data = perc_error, 
+       dv = "perc_error",
+       between = "smoking_category",
+       within = "Congruency")
+
+error_congruency <- perc_error %>% 
+  group_by(Congruency) %>% 
+  summarise(mean_error = round(mean(perc_error), 2),
+            sd_error = round(sd(perc_error), 2))
+
+# Non-parametric tests 
+error_con <- perc_error %>% select(Congruency, perc_error) %>% 
+  spread(key = Congruency, value = perc_error)
+
+```
+
+For the Eriksen Flanker task, the DV was the percentage error where participants provided the incorrect response. A 2 x 2 mixed ANOVA was performed with one between-subject factor of smoking group (smoker vs non-smoker) and one within-subject factor of congruency (congruent vs incongruent). These results should also be considered exploratory as they were not outlined in the pre-registration protocol.
+
+There was not a significant effect of smoking group (`r report_afex_anova(error_ANOVA, 1)`), but there was a significant main effect of congruency (`r report_afex_anova(error_ANOVA, 2)`), with participants having greater percentage error on incongruent (M = `r error_congruency[2,2]`%, SD = `r error_congruency[2,3]`%) trials than congruent (M = `r error_congruency[1,2]`%, SD = `r error_congruency[1,3]`%) trials. A Wilcoxon paired samples test showed complimentary results, with higher percentage error on NoGo trials than Go trials, `r report_wilcoxon(data = error_con, condition_1 = error_con$Con, condition_2 = error_con$Incon)`. There was not a significant interaction between smoking group and congruency, `r report_afex_anova(error_ANOVA, 3)`. The results for the behavioural data are shown graphically in Figure 4.5.
+
+```{r eriksen behavioural plot}
+
+(eriksen_behavioural <- afex_plot(error_ANOVA, 
+          x = "smoking_category", 
+          trace = "Congruency", 
+          error_ci = T,
+          legend_title = "Congruency",
+          point_arg = list(size = 3),
+          error_arg = list(size = 0.5, width = 0.1),
+          line_arg = list(size = 0.5),
+          data_arg = list(size = 2),
+          mapping = c("color", "shape", "fill")) + 
+  xlab("Smoking Group") + 
+  ylab("Percentage Error (%)") + 
+  scale_y_continuous(limits = c(0, 40),
+                     breaks = seq(0, 40, 10)) + 
+  scale_color_manual(values = c("#a6cee3", "#b2df8a")) + 
+  theme_cowplot()
+)
+
+save_plot(plot = eriksen_behavioural,
+          filename = "Plots/eriksen_behavioural_plot.pdf",
+          base_height = 7.5, 
+          base_width = 9)
+
+```
+
+### *3.4.2. ERP components* 	
+
+Table 4.3 shows the mean voltage in the time windows of each ERP component across electrode and smoking groups. A similar change in analysis to the pre-registration protocol was performed for the Eriksen Flanker task. The DV was the difference in mean amplitude between correct and incorrect trials (incorrect - correct), with higher positive values indicating relatively greater activity on incorrect trials. A 2 x 3 mixed ANOVA was performed with one between-subjects IV of smoking group (smokers vs non-smokers) and one within-subjects IV of electrode (Cz vs Fz vs Pz). The deviation from the pre-registration protocol also applies here. The degrees of freedom for the main effect of electrode and the interaction effect was corrected using the Greenhouse-Geisser correction. 
+
+
+```{r mean ampltitude table eriksen}
+ERN_correct <- difference_wave %>% 
+  group_by(smoking_category, electrode) %>% 
+  filter(time >= 25 & time <= 75) %>% 
+  summarise(mean_correct = round(mean(correct), 2),
+            sd_correct = round(sd(correct), 2)) %>% 
+  mutate(value = paste0(mean_correct, " (", sd_correct, ")")) %>% 
+  select(-mean_correct, -sd_correct) %>% 
+  spread(key = smoking_category, value = value) %>% 
+  mutate(condition = "Correct ERN")
+
+ERN_incorrect <- difference_wave %>% 
+  group_by(smoking_category, electrode) %>% 
+  filter(time >= 25 & time <= 75) %>% 
+  summarise(mean_incorrect = round(mean(incorrect), 2),
+            sd_incorrect = round(sd(incorrect), 2)) %>% 
+  mutate(value = paste0(mean_incorrect, " (", sd_incorrect, ")")) %>% 
+  select(-mean_incorrect, -sd_incorrect) %>% 
+  spread(key = smoking_category, value = value) %>% 
+  mutate(condition = "Incorrect ERN")
+
+Pe_correct <- difference_wave %>% 
+  group_by(smoking_category, electrode) %>% 
+  filter(time >= 200 & time <= 400) %>% 
+  summarise(mean_correct = round(mean(correct), 2),
+            sd_correct = round(sd(correct), 2)) %>% 
+  mutate(value = paste0(mean_correct, " (", sd_correct, ")")) %>% 
+  select(-mean_correct, -sd_correct) %>% 
+  spread(key = smoking_category, value = value) %>% 
+  mutate(condition = "Correct ERN")
+
+Pe_incorrect <- difference_wave %>% 
+  group_by(smoking_category, electrode) %>% 
+  filter(time >= 200 & time <= 400) %>% 
+  summarise(mean_incorrect = round(mean(incorrect), 2),
+            sd_incorrect = round(sd(incorrect), 2)) %>% 
+  mutate(value = paste0(mean_incorrect, " (", sd_incorrect, ")")) %>% 
+  select(-mean_incorrect, -sd_incorrect) %>% 
+  spread(key = smoking_category, value = value) %>% 
+  mutate(condition = "Incorrect ERN")
+
+eriksen_desc <- bind_rows(ERN_correct, ERN_incorrect, Pe_correct, Pe_incorrect) %>% 
+  select(condition, electrode, "Non-daily Smokers", 'Daily Smokers', "Non-smokers")
+
+tidy_rows = c(2, 3, 5, 6, 8, 9, 11, 12)
+
+eriksen_desc[tidy_rows, 1] <- ""
+
+kable(x = eriksen_desc, 
+      format = "html", 
+      caption = "Table 4.2 continued", 
+      align = "c",
+      digits = 2, 
+      col.names = c("Condition", "Electrode", "Non-daily Smokers", 'Daily Smokers', "Non-smokers")) 
+
+```
+
+```{r eriksen waveform plot}
+
+# Create constant colour scheme for all plots 
+difference_wave$electrode <- factor(difference_wave$electrode, 
+                                    levels = c("Cz", "Fz", "Pz"),
+                                    labels = c("Cz", "Fz", "Pz"))
+
+group.cols <- c("#a6cee3", "#1f78b4", "#b2df8a")
+
+names(group.cols) <- (levels(difference_wave$electrode))
+
+colScale <- scale_color_manual(name = "Electrode", values = group.cols)
+
+# Create difference wave plot 
+
+(eriksen_grand_difference <- difference_wave %>% 
+  ggplot(aes(x = time, y = difference)) + 
+  facet_grid(electrode~smoking_category) + 
+  # stat_summary(aes(group = interaction(smoking_group, subject), color = smoking_group),
+  #              fun.y = mean,
+  #              geom = "line",
+  #              size = 1,
+  #              alpha = 0.2) + 
+  stat_summary(aes(group = interaction(smoking_category, electrode), color = electrode),
+               fun.y = mean,
+               geom = "line",
+               size = 1,
+               alpha = 1) + 
+  scale_x_discrete(limits = seq(from = -200, to = 800, by = 200)) +
+  scale_y_continuous(limits = c(-15, 25),
+                     breaks = seq(-15, 25, 5)) + 
+  annotate("rect", xmin = 25, xmax = 75, ymin = -15, ymax = 25, alpha = 0.3) + #ERN
+  annotate("rect", xmin = 200, xmax = 400, ymin = -15, ymax = 25, alpha = 0.3) + #Pe
+  geom_hline(yintercept = 0, linetype = 2) + 
+  geom_vline(xintercept = 0, linetype = 2) + 
+  xlab("Time (ms)") + 
+  ylab(expression("Mean amplitude"~(mu*"V"))) + 
+  colScale + 
+  theme_cowplot() +
+  theme(legend.position = "none",
+        panel.spacing.x = unit(10, "mm"))) 
+
+save_plot(plot = eriksen_grand_difference,
+          filename = "Plots/eriksen_grand-waveform.pdf",
+          base_height = 10, 
+          base_width = 15)
+```
+
+For the ERN time window, there was not a significant effect of smoking group (`r report_afex_anova(ERN_ANOVA, 1)`), but there was a main effect of electrode (`r report_afex_anova(ERN_ANOVA, 2)`). The pairwise comparisons were not followed up as a main effect of electrode was not of interest. There was not a significant interaction between smoking groups and electrode (`r report_afex_anova(ERN_ANOVA, 3)`). For the Pe time window, there was not a significant main effect of smoking group (`r report_afex_anova(Pe_ANOVA, 1)`), but there was a main effect of electrode (`r report_afex_anova(Pe_ANOVA, 2)`). There was no significant interaction between smoking group and electrode, `r report_afex_anova(Pe_ANOVA, 3)`. The mean amplitude per smoking group and electrode is displayed in Figure 4.7. 
+
+```{r eriksen mean amplitude plot}
+
+ERN_mean <- afex_plot(ERN_ANOVA, 
+                      x = "smoking_category", 
+                      trace = "electrode", 
+                      error_ci = T,
+                      legend_title = "Electrode",
+                      point_arg = list(size = 3),
+                      error_arg = list(size = 0.5, width = 0.1),
+                      line_arg = list(size = 0.5),
+                      mapping = c("color", "shape", "fill")) + 
+  xlab("Smoking Group") + 
+  ylab(expression("Mean amplitude"~(mu*"V"))) + 
+  scale_y_continuous(limits = c(-12, 6),
+                     breaks = seq(-12, 6, 2)) + 
+  scale_color_manual(values = c("#a6cee3", "#1f78b4", "#b2df8a")) + 
+  geom_hline(yintercept = 0, linetype = 2) + 
+  theme_cowplot()
+
+Pe_mean <- afex_plot(Pe_ANOVA, 
+                     x = "smoking_category", 
+                     trace = "electrode", 
+                     error_ci = T,
+                     legend_title = "Electrode",
+                     point_arg = list(size = 3),
+                     error_arg = list(size = 0.5, width = 0.1),
+                     line_arg = list(size = 0.5),
+                     mapping = c("color", "shape", "fill")) + 
+  xlab("Smoking Group") + 
+  ylab(expression("Mean amplitude"~(mu*"V"))) + 
+  scale_y_continuous(limits = c(-6, 12),
+                     breaks = seq(-6, 12, 2)) + 
+  scale_color_manual(values = c("#a6cee3", "#1f78b4", "#b2df8a")) + 
+  geom_hline(yintercept = 0, linetype = 2) + 
+  theme_cowplot()
+
+(eriksen_means <- plot_grid(N2_mean, P3_mean,
+          nrow = 2,
+          ncol = 1, 
+          labels = c("(a) ERN", "(b) Pe"),
+          label_x = 0.1)
+)
+
+save_plot(plot = eriksen_means,
+          filename = "Plots/eriksen_mean_amplitudes.pdf",
+          base_height = 10, 
+          base_width = 8)
+```
+
+## 3.5. Reliability estimates
+
+In order to estimate the reliability of the measures, the permutation based split-half reliability was calculated (Parsons et al. 2019). The procedure followed Rietdijk et al. (2014) where the mean amplitude per component was calculated for each trial in the task. 
+
+```{r eriksen splithalf reliability, warning=F, message=F, results="hide"}
+full_trials <- read_bulk(directory = "reliability_data/eriksen/")
+
+trial.n <- read_csv("Average_data/eriksen_trial_numbers.csv")
+
+full_trials <- left_join(full_trials, trial.n,
+                           by = c("subject_nr" = "participant")) 
+
+ERN_reliability <- full_trials %>% 
+  filter(Block != "Practice" & correct == 0 & component == "ERN" & !is.na(mean_amp) & included == 1)
+
+perms <- 1e4
+
+set.seed(23112019)
+
+ern_split <- splithalf(data = ERN_reliability,
+          var.ACC = "accuracy",
+          score = "average",
+          halftype = "random",
+          permutations = perms,
+          var.RT = "mean_amp",
+          var.participant = "subject_nr",
+          var.trialnum = "Trial_N",
+          var.condition = "electrode",
+          conditionlist = c("Pz", "Cz", "Fz"))
+
+Pe_reliability <- full_trials %>% 
+  filter(Block != "Practice" & correct == 0 & component == "Pe" & !is.na(mean_amp) & included == 1)
+
+pe_split <- splithalf(data = Pe_reliability,
+          var.ACC = "accuracy",
+          score = "average",
+          halftype = "random",
+          permutations = perms,
+          var.RT = "mean_amp",
+          var.participant = "subject_nr",
+          var.trialnum = "Trial_N",
+          var.condition = "electrode",
+          conditionlist = c("Pz", "Cz", "Fz"))
+```
+
+
+For the Eriksen Flanker task, this meant calculating the mean amplitude between 25-75ms post-response for the ERN and between 200-400ms post-response for the Pe. Only the incorrect trials were included where the amplitude was expected to be larger. The Fz electrode was used for the ERN and the Pz was used for the Pe component. This left a mean amplitude per each valid trial from the processing steps followed for the main analyses. The splithalf R package (Parsons 2019) was used to calculate split-half reliability using 5000 permutations. For the ERN component, there was moderate to high split-half reliability for the Fz (`r format.splithalf(ern_split$final_estimates, "Fz")`), Pz (`r format.splithalf(ern_split$final_estimates, "Pz")`), and Cz electrodes (`r format.splithalf(ern_split$final_estimates, "Cz")`). For the Pe component, there was high split-half reliability for the Fz (`r format.splithalf(pe_split$final_estimates, "Fz")`), Pz (`r format.splithalf(pe_split$final_estimates, "Pz")`), and Cz electrodes (`r format.splithalf(pe_split$final_estimates, "Cz")`). As in chapter 3, these estimates are corrected using the Spearman-Brown formula (Parsons et al. 2019).
+
+```{r gonogo splithalf reliability, warning=F, message=F, results="hide"}
+full_trials <- read_bulk(directory = "reliability_data/gonogo/")
+
+trial.n <- read_csv("Average_data/gonogo_trial_numbers.csv")
+
+full_trials <- left_join(full_trials, trial.n,
+                         by = c("subject_nr" = "subject")) 
+
+N2_reliability <- full_trials %>% 
+  mutate(correct = case_when(Stim_type == "Go" & response == "x" ~ 1,
+                             Stim_type == "NoGo" & response == "None" ~ 1,
+                             Stim_type == "Go" & response == "None" ~ 0,
+                             Stim_type == "NoGo" & response == "x" ~ 0)) %>% 
+  filter(Block != "Practice" & correct == 1 & Stim_type == "NoGo" & component == "N2" & !is.na(mean_amp) & included == 1)
+
+set.seed(23112019)
+
+n2_split <- splithalf(data = N2_reliability,
+          var.ACC = "accuracy",
+          score = "average",
+          halftype = "random",
+          permutations = perms,
+          var.RT = "mean_amp",
+          var.participant = "subject_nr",
+          var.trialnum = "Trial_N",
+          var.condition = "electrode",
+          conditionlist = c("Pz", "Cz", "Fz"))
+
+P3_reliability <- full_trials %>% 
+  mutate(correct = case_when(Stim_type == "Go" & response == "x" ~ 1,
+                             Stim_type == "NoGo" & response == "None" ~ 1,
+                             Stim_type == "Go" & response == "None" ~ 0,
+                             Stim_type == "NoGo" & response == "x" ~ 0)) %>% 
+  filter(Block != "Practice" & correct == 1 & Stim_type == "NoGo" & component == "P3" & !is.na(mean_amp) & included == 1)
+
+p3_split <- splithalf(data = P3_reliability,
+          var.ACC = "accuracy",
+          score = "average",
+          halftype = "random",
+          permutations = perms,
+          var.RT = "mean_amp",
+          var.participant = "subject_nr",
+          var.trialnum = "Trial_N",
+          var.condition = "electrode",
+          conditionlist = c("Pz", "Cz", "Fz"))
+```
+
+For the Go/NoGo task, the mean amplitude per trial was calculated between 175-250ms for the N2 component and 300-500ms for the P3 component. Consistent with Rietdijk et al. (2014), the analysis focused on NoGo trials and included all three electrodes: Fz, Cz, and Pz. For the N2 component, there was moderate to high split-half reliability for the Fz (`r format.splithalf(n2_split$final_estimates, "Fz")`), Pz (`r format.splithalf(n2_split$final_estimates, "Pz")`), and Cz electrodes (`r format.splithalf(n2_split$final_estimates, "Cz")`). For the P3 component, there was high split-half reliability for the Fz (`r format.splithalf(p3_split$final_estimates, "Fz")`), Pz (`r format.splithalf(p3_split$final_estimates, "Pz")`), and Cz electrodes (`r format.splithalf(p3_split$final_estimates, "Cz")`). 
