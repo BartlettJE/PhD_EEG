@@ -3,6 +3,8 @@ require(tidyverse)
 require(pracma) #function to allow the calculation of linear space for plotting 
 require(cowplot)
 require(readbulk)
+require(afex)
+require(skimr)
 
 source("EEG_functions.R")
 
@@ -18,7 +20,7 @@ mat.files <- list.files(path = "Rdata/Go-NoGo/",
                         full.names = F)
 
 # Define which electrode I want to focus on out of the array of 33
-electrode = "Pz"
+electrode = "Fz"
 
 # Define the linear space for the x axis of the graphs 
 x = linspace(-200,800,1025)
@@ -107,9 +109,12 @@ trial.n <- trial.n %>%
   mutate(included = case_when(n_go & n_nogo > 19 ~ 1,
                               n_go & n_nogo < 20 ~ 0))
 
+#write.csv(trial.n, "Average_data/gonogo_trial_numbers.csv")
 
 
 # Read in all processed data to save time 
+trial.n <- read_csv("Average_data/gonogo_trial_numbers.csv")
+
 amplitude.dat <- read_bulk(directory = "processed_data/gonogo/",
                            extension = ".csv")
 
@@ -139,9 +144,9 @@ names(group.cols) <- (levels(difference_wave$electrode))
 
 colScale <- scale_color_manual(name = "Electrode", values = group.cols)
 
-# Subset data for when I want to show individual data
-subject <- 2016
-difference_wave2 <- subset(difference_wave, subject == 2016)
+# # Subset data for when I want to show individual data
+# subject <- 2016
+# difference_wave2 <- subset(difference_wave, subject == 2016)
 
 # Create a plot with both go and nogo waves 
 (grand_difference <- difference_wave %>% 
@@ -157,12 +162,12 @@ difference_wave2 <- subset(difference_wave, subject == 2016)
                geom = "line",
                size = 1,
                alpha = 1) + 
-  stat_summary(data = difference_wave2, # optional label participant
-               fun.y = mean,
-               geom = "line",
-               color = "black",
-               size = 1,
-               alpha = 1) +
+  # stat_summary(data = difference_wave2, # optional label participant
+  #              fun.y = mean,
+  #              geom = "line",
+  #              color = "black",
+  #              size = 1,
+  #              alpha = 1) +
   scale_x_discrete(limits = seq(from = -200, to = 800, by = 200)) +
   geom_hline(yintercept = 0, linetype = 2) + 
   geom_vline(xintercept = 0, linetype = 2) + 
@@ -181,13 +186,102 @@ difference_wave2 <- subset(difference_wave, subject == 2016)
 #           base_height = 10,
 #           base_width = 16)
 
-# Save participant plot
-save_plot(
-  filename = paste("ERP-plots/participant_plots/",
-                   subject,
-                   "-Go-NoGo.pdf",
-                   sep = ""),
-  plot = grand_difference,
-  base_height = 10,
-  base_width = 16
-)
+# # Save participant plot
+# save_plot(
+#   filename = paste("ERP-plots/participant_plots/",
+#                    subject,
+#                    "-Go-NoGo.pdf",
+#                    sep = ""),
+#   plot = grand_difference,
+#   base_height = 10,
+#   base_width = 16
+# )
+
+### Number trials included 
+
+trial.n %>% 
+  filter(included == 1) %>%
+  skim()
+
+### Inferential stats
+
+# N2 analysis
+N2 <- difference_wave %>% 
+  group_by(subject, smoking_group, electrode) %>% 
+  filter(time >= 175 & time <= 250) %>% 
+  summarise(mean_amp = mean(difference))
+
+N2_ANOVA <- aov_ez(id = "subject",
+                    data = N2, 
+                    dv = "mean_amp",
+                    between = "smoking_group",
+                    within = "electrode")
+
+afex_plot(N2_ANOVA, x = "smoking_group", trace = "electrode")
+
+# P3 analysis 
+P3 <- difference_wave %>% 
+  group_by(subject, smoking_group, electrode) %>% 
+  filter(time >= 300 & time <= 500) %>% 
+  summarise(mean_amp = mean(difference))
+
+P3_ANOVA <- aov_ez(id = "subject",
+                   data = P3, 
+                   dv = "mean_amp",
+                   between = "smoking_group",
+                   within = "electrode")
+
+afex_plot(P3_ANOVA, x = "smoking_group", trace = "electrode")
+
+# Descriptives 
+# N2
+difference_wave %>% 
+  group_by(smoking_group, electrode) %>% 
+  filter(time >= 175 & time <= 250) %>% 
+  summarise(mean_Go = mean(Go),
+            sd_Go = sd(Go),
+            mean_NoGo = mean(NoGo),
+            sd_NoGo = sd(NoGo))
+
+# P3
+difference_wave %>% 
+  group_by(smoking_group, electrode) %>% 
+  filter(time >= 300 & time <= 500) %>% 
+  summarise(mean_Go = mean(Go),
+            sd_Go = sd(Go),
+            mean_NoGo = mean(NoGo),
+            sd_NoGo = sd(NoGo))
+
+# Behavioural analysis 
+behav.dat <- read_bulk(directory = "Raw_data/Behavioural/Go-NoGo/",
+                       extension = ".csv")
+
+behav.dat <- behav.dat %>% 
+  select(Block, subject_nr, correct, Stim_type, response_time, response) %>%
+  mutate(correct = case_when(Stim_type == "Go" & response == "x" ~ 1,
+                             Stim_type == "NoGo" & response == "None" ~ 1,
+                             Stim_type == "Go" & response == "None" ~ 0,
+                             Stim_type == "NoGo" & response == "x" ~ 0)) %>% 
+  filter(Block != "Practice" & correct == 1 & subject_nr %in% difference_wave$subject)
+
+perc_error <- behav.dat %>% 
+  group_by(subject_nr, Stim_type) %>% 
+  summarise(sum_error = sum(correct)) %>%   
+  mutate(condition_n = case_when(Stim_type == "Go" ~ 320,
+                                 Stim_type == "NoGo" ~ 80)) %>%
+  mutate(perc_error = 100 - (sum_error / condition_n) * 100,
+         smoking_group = case_when(substr(subject_nr, 0, 1) == 1 ~ "Non-Smoker",
+                                   substr(subject_nr, 0, 1) == 2 ~ "Smoker")) 
+
+error_ANOVA <- aov_ez(id = "subject_nr",
+                      data = perc_error, 
+                      dv = "perc_error",
+                      between = "smoking_group",
+                      within = "Stim_type")
+
+afex_plot(error_ANOVA, x = "smoking_group", trace = "Stim_type", error_ci = T)
+
+perc_error %>% 
+  group_by(Stim_type) %>% 
+  summarise(mean_error = mean(perc_error),
+            sd_error = sd(perc_error))

@@ -3,6 +3,8 @@ require(tidyverse)
 require(pracma) #function to allow the calculation of linear space for plotting 
 require(cowplot)
 require(readbulk)
+require(afex)
+require(skimr)
 
 # Load my packages
 source("EEG_functions.R")
@@ -20,7 +22,7 @@ mat.files <- list.files(path = "Rdata/Eriksen/",
                         full.names = F)
 
 # Define which electrode I want to focus on out of the array of 33
-electrode = "Pz"
+electrode = "Cz"
 
 # Define the linear space for the x axis of the graphs 
 x = linspace(-200,800,1025)
@@ -105,11 +107,16 @@ trial.n <- trial.n %>%
   mutate(included = case_when(n_correct & n_incorrect > 7 ~ 1,
                               n_correct & n_incorrect < 8 ~ 0))
 
+#write.csv(trial.n, "Average_data/eriksen_trial_numbers.csv")
+
 # Read in processed data from file 
 amplitude.dat <- read_bulk(directory = "processed_data/eriksen/",
                            extension = ".csv")
 
 # append eligible or not 
+# Number trials included 
+trial.n <- read_csv("Average_data/eriksen_trial_numbers.csv")
+
 amplitude.dat <- left_join(amplitude.dat, trial.n,
             by = c("subject" = "participant")) 
 
@@ -189,3 +196,88 @@ colScale <- scale_color_manual(name = "Electrode", values = group.cols)
 #   base_height = 10,
 #   base_width = 16
 # )
+
+### Number trials included 
+trial.n %>% 
+  filter(included == 1) %>%
+  skim()
+
+### Inferential stats
+
+# ERN analysis
+ERN <- difference_wave %>% 
+  group_by(subject, smoking_group, electrode) %>% 
+  filter(time >= 25 & time <= 75) %>% 
+  summarise(mean_amp = mean(difference))
+
+ERN_ANOVA <- aov_ez(id = "subject",
+       data = ERN, 
+       dv = "mean_amp",
+       between = "smoking_group",
+       within = "electrode")
+
+afex_plot(ERN_ANOVA, x = "smoking_group", trace = "electrode")
+
+# Pe analysis 
+Pe <- difference_wave %>% 
+  group_by(subject, smoking_group, electrode) %>% 
+  filter(time >= 200 & time <= 400) %>% 
+  summarise(mean_amp = mean(difference))
+
+Pe_ANOVA <- aov_ez(id = "subject",
+                    data = Pe, 
+                    dv = "mean_amp",
+                    between = "smoking_group",
+                    within = "electrode")
+
+afex_plot(Pe_ANOVA, x = "smoking_group", trace = "electrode", error_ci = T)
+
+# Descriptives 
+# ERN 
+difference_wave %>% 
+  group_by(smoking_group, electrode) %>% 
+  filter(time >= 25 & time <= 75) %>% 
+  summarise(mean_correct = mean(correct),
+            sd_correct = sd(correct),
+            mean_incorrect = mean(incorrect),
+            sd_incorrect = sd(incorrect))
+
+# Pe 
+difference_wave %>% 
+  group_by(smoking_group, electrode) %>% 
+  filter(time >= 200 & time <= 400) %>% 
+  summarise(mean_correct = mean(correct),
+            sd_correct = sd(correct),
+            mean_incorrect = mean(incorrect),
+            sd_incorrect = sd(incorrect))
+
+# Behavioural analysis 
+behav.dat <- read_bulk(directory = "Raw_data/Behavioural/Eriksen/",
+                           extension = ".csv")
+
+behav.dat <- behav.dat %>% 
+  filter(Block != "Practice" & correct == 1 & response_time >= 200 & subject_nr %in% difference_wave$subject) %>% 
+  group_by(subject_nr, Congruency) %>% 
+  mutate(median_rt = median(response_time),
+         MAD_threshold = stats::mad(response_time)*2.5) %>% 
+  filter(response_time > (median_rt - MAD_threshold) & response_time < (median_rt + MAD_threshold))
+
+perc_error <- behav.dat %>% 
+  group_by(subject_nr, Congruency) %>% 
+  summarise(perc_error = 100 - (sum(correct) / 200) * 100) %>% 
+  mutate(smoking_group = case_when(substr(subject_nr, 0, 1) == 1 ~ "Non-Smoker",
+                                   substr(subject_nr, 0, 1) == 2 ~ "Smoker")) 
+  
+error_ANOVA <- aov_ez(id = "subject_nr",
+       data = perc_error, 
+       dv = "perc_error",
+       between = "smoking_group",
+       within = "Congruency")
+
+afex_plot(error_ANOVA, x = "smoking_group", trace = "Congruency", error_ci = T)
+
+perc_error %>% 
+  group_by(Congruency) %>% 
+  summarise(mean_error = mean(perc_error),
+            sd_error = sd(perc_error))
+
